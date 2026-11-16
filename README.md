@@ -6,6 +6,8 @@ Die Plattform wird für regionale Sportorganisationen weiterentwickelt: Standort
 
 **1.000 gleichzeitig aktive Nutzer sind ein verbindliches Ziel, keine bereits nachgewiesene Produktionskapazität.** Kriterien: [Product Backlog](docs/PRODUCT_BACKLOG.md). Reproduzierbarer isolierter Test: `npm run test:load`. Er verwendet keine Produktionsdatenbank, echten Konten oder E-Mails. Der vollständige lokale Abschlusslauf erreicht 1.000 erfolgreiche Anmeldungen und 0 % unerwartete Fehler, verfehlt aber das Antwortzeitziel. Tatsächliche Messwerte, Optimierungen und offene Abnahmeschritte: [Performance-Bericht](docs/PERFORMANCE.md).
 
+Die folgende gezielte Performance-Optimierung wurde zusätzlich in einem privaten Cloudflare-Staging mit 1.000 aktiven Nutzern geprüft: Terminabfrage p95 171→119 ms, Buchung 244→138 ms, Absage 261→143 ms, keine unerwarteten API-Fehler nach Optimierung. Anmeldung scheitert weiterhin teilweise am bestätigten Free-Plan-CPU-Limit; die harte Buchungsspitze liegt über 2 Sekunden. Keine neuen Funktionen und kein Redesign. Vollständige Vorher-/Nachher-Bedingungen: [Optimierungsbericht](docs/PERFORMANCE_OPTIMIZATION.md).
+
 - Anwendung und Demo: https://teamzeit.yousef-alhabod.de
 - Portfolio: https://yousef-alhabod.de/#teamzeit
 - Datenschutz: https://teamzeit.yousef-alhabod.de/datenschutz.html
@@ -44,7 +46,7 @@ Die Passwort-Wiederherstellung verwendet die verifizierte Resend-Senderdomain `m
 
 ## Validierung
 
-`npm run check` prüft Syntax und führt 30 Tests aus, darunter integrierte Worker/D1-Abläufe mit vier Konten, regionalen Rollen, getrennten Gruppen, persönlichen E-Mail-Einladungen, Terminserien über Zeitumstellungen, konkurrierenden Platzbuchungen und Wartelisten, Nachrücken bei Kontolöschung oder Gruppenentfernung, Benachrichtigungen, veränderten Antworten, neuen Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung und Schutz der letzten Trainerrolle.
+`npm run check` prüft Syntax und führt 32 Tests aus, darunter integrierte Worker/D1-Abläufe mit vier Konten, regionalen Rollen, getrennten Gruppen, persönlichen E-Mail-Einladungen, Terminserien über Zeitumstellungen, konkurrierenden Platzbuchungen und Wartelisten, Nachrücken bei Kontolöschung oder Gruppenentfernung, Benachrichtigungen, veränderten Antworten, neuen Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung und Schutz der letzten Trainerrolle. Zusätzlich geprüft: sofortiger Sitzungs-/Rechtewiderruf in den optimierten Abfragen, atomare parallele Anmeldefehler sowie privater Staging-Zugang und E-Mail-Sperre.
 
 ### Standorte, Rollen und Betrieb
 

@@ -1,0 +1,88 @@
+{
+  "at": "2026-11-16T18:23:09.687Z",
+  "label": "optimized-api",
+  "target": "isolated Cloudflare Worker + EU D1",
+  "databaseId": "eba63996-3ef2-47b1-bca1-c2bdb01d57de",
+  "commit": "bad9303ea96fa4e75e8cff108c7a02899656688f",
+  "users": 1000,
+  "authMode": "seeded",
+  "actualLogins": 0,
+  "preparedSessions": 1000,
+  "writtenRows": 12200,
+  "readRows": 243601,
+  "budgetStopped": false,
+  "peakActiveUsers": 1000,
+  "activeSeconds": 120.01630650000001,
+  "loginSeconds": 0.000001599999999996271,
+  "maxInFlight": 1000,
+  "connections": 256,
+  "clientEventLoopP95Ms": 32,
+  "runtime": "v26.13.1",
+  "overall": {
+    "count": 7000,
+    "p50": 95,
+    "p95": 3224,
+    "p99": 3840,
+    "max": 3848,
+    "errors": 0,
+    "errorPercent": 0,
+    "queries": 2
+  },
+  "operations": {
+    "events": {
+      "count": 4000,
+      "p50": 81,
+      "p95": 119,
+      "p99": 189,
+      "max": 329,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 2
+    },
+    "book": {
+      "count": 1000,
+      "p50": 110,
+      "p95": 138,
+      "p99": 160,
+      "max": 278,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 2
+    },
+    "cancel": {
+      "count": 1000,
+      "p50": 110,
+      "p95": 143,
+      "p99": 178,
+      "max": 277,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 2
+    },
+    "security": {
+      "count": 1000,
+      "p50": 2770,
+      "p95": 3741,
+      "p99": 3747,
+      "max": 3752,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 1
+    },
+    "contention": {
+      "count": 1000,
+      "p50": 2344,
+      "p95": 3842,
+      "p99": 3846,
+      "max": 3848,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 2
+    }
+  },
+  "productionTargeted": false,
+  "mailConfigured": false,
+  "totalSeconds": 128.2009726,
+  "rawFile": "test-results/staging-optimized-api-1794853389759.json",
+  "rawSha256": "475e926f8fcf6f2d07eb4529cc752f44e8521e3f8dddd69937064091ec391770"
+}

@@ -1,5 +1,7 @@
 # Performance-Abnahme TeamZeit · 16. November 2026
 
+**Aktualisierung:** Der anschließende echte Cloudflare-Staging-Vergleich, die gezielten Optimierungen und die bestätigte CPU-Tarifgrenze sind in [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) dokumentiert. Die folgenden lokalen Messungen bleiben als historischer Ausgangsstand erhalten; sie sind keine Cloudflare-Vorherwerte.
+
 **Status NFR-PERF-001: offen, nicht abgenommen.** Ziel sind mindestens 1.000 gleichzeitig aktive Nutzer, p95 unter 2.000 ms je relevantem Vorgang und weniger als 1 % unerwartete Fehler. Die veröffentlichten Sportfunktionen sind funktional geprüft; eine Kapazität für 1.000 gleichzeitige Produktionsnutzer wird ausdrücklich nicht behauptet.
 
 ## Umgebung und Reproduktion

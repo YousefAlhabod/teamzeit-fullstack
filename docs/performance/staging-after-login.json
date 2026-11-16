@@ -1,0 +1,20 @@
+{
+  "at": "2026-11-16T18:19:30.378Z",
+  "error": "Some real logins failed; API load is not silently supplied with substitute sessions",
+  "users": 1000,
+  "actualLogins": 606,
+  "operations": {
+    "login": {
+      "count": 1000,
+      "p50": 394,
+      "p95": 584,
+      "p99": 743,
+      "max": 1765,
+      "errors": 394,
+      "errorPercent": 39.4,
+      "queries": 1.82
+    }
+  },
+  "rawFile": "test-results/staging-failed-1794853170378.json",
+  "rawSha256": "9c83720c53e260cd7038c76c4d66484b2214579e447619c11282d40114c51a9e"
+}

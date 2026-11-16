@@ -16,6 +16,8 @@ Die Sportorganisation hat Vorrang. Scrum-Rollen sind ausschließlich Projektroll
 
 TeamZeit muss für mindestens **1.000 gleichzeitig aktive Nutzer** ausgelegt sein. 1.000 gespeicherte Mitglieder oder überwiegend inaktive Sitzungen sind kein ausreichender Nachweis. **Mindestens 95 % der relevanten Anfragen müssen unter 2.000 ms liegen, die Quote unerwarteter Fehler muss unter 1 % liegen.** Dies gilt jeweils auch für Login, Terminabfrage, Buchung und Absage, nicht nur für ein gemitteltes Gesamtergebnis.
 
+Aktueller Stand nach gezielter Optimierung: im echten privaten Cloudflare-Staging bei 1.000 aktiven Nutzern p95 Abfrage 119 ms, Buchung 138 ms, Absage 143 ms; 0 unerwartete API-Fehler. Trotzdem **nicht abgenommen**: 39,4 % Ressourcenlimit-Fehler bei den separaten 1.000 Anmeldeversuchen und p95 3.842 ms bei der zusätzlichen gleichzeitigen Buchungsspitze. Der bestätigte Free-Plan erlaubt kein höheres CPU-Limit. Details, Rohdatenbezüge und unveränderte Sicherheitsparameter: [Performance-Optimierung](PERFORMANCE_OPTIMIZATION.md).
+
 ### Reproduzierbares Abnahmeszenario
 
 - Isolierte Worker/D1-Testumgebung mit 1.000 synthetischen Konten, 3 Städten, 50 regionalen Gruppen, mehreren Trainern, 600 Terminen und einem gemeinsamen stark nachgefragten Termin. Keine echten Nutzer, Secrets oder E-Mails. Produktionsdatenbank wird nie als Lasttestziel akzeptiert.

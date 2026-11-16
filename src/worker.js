@@ -104,21 +104,19 @@ async function listEvents(env, groupId, userId, role, query=new URLSearchParams(
 }
 async function attemptLogin(env,email,password) {
   const now=new Date().toISOString();
-  const attempt=await env.DB.prepare('SELECT count,first_at,blocked_until FROM login_attempts WHERE email=?').bind(email).first();
+  const user=await env.DB.prepare('SELECT u.*,a.count AS attempt_count,a.first_at AS attempt_first_at,a.blocked_until FROM (SELECT ? AS email) input LEFT JOIN users u ON u.email=input.email LEFT JOIN login_attempts a ON a.email=input.email').bind(email).first();
+  const attempt=user?.attempt_count===null?null:{count:user.attempt_count,first_at:user.attempt_first_at,blocked_until:user.blocked_until};
   if(attempt?.blocked_until && attempt.blocked_until>now) throw new HttpError(429,'Zu viele Versuche. Bitte später erneut versuchen.');
-  const user=await env.DB.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
   // Hash even on missing user to mitigate simple timing differences.
   const salt=user?.password_salt||'0'.repeat(32);
   const digest=await hashPassword(password,salt,user?.password_hash);
-  if(!user || !safeEqual(digest,user.password_hash)) {
-    const stale=!attempt || Date.now()-Date.parse(attempt.first_at)>15*60*1000;
-    const count=stale?1:attempt.count+1;
+  if(!user?.id || !safeEqual(digest,user.password_hash)) {
     await env.DB.prepare(`INSERT INTO login_attempts(email,count,first_at,blocked_until) VALUES(?,?,?,?)
-      ON CONFLICT(email) DO UPDATE SET count=excluded.count,first_at=excluded.first_at,blocked_until=excluded.blocked_until`)
-      .bind(email,count,stale?now:attempt.first_at,count>=8?new Date(Date.now()+15*60*1000).toISOString():null).run();
+      ON CONFLICT(email) DO UPDATE SET count=CASE WHEN first_at<? THEN 1 ELSE count+1 END,first_at=CASE WHEN first_at<? THEN excluded.first_at ELSE first_at END,blocked_until=CASE WHEN first_at>=? AND count+1>=8 THEN ? ELSE NULL END`)
+      .bind(email,1,now,null,new Date(Date.now()-900000).toISOString(),new Date(Date.now()-900000).toISOString(),new Date(Date.now()-900000).toISOString(),new Date(Date.now()+900000).toISOString()).run();
     throw new HttpError(401,'E-Mail oder Passwort ungültig.');
   }
-  await env.DB.prepare('DELETE FROM login_attempts WHERE email=?').bind(email).run();
+  if(attempt)await env.DB.prepare('DELETE FROM login_attempts WHERE email=?').bind(email).run();
   return user;
 }
 async function issueSession(env,user,request) {
@@ -134,6 +132,15 @@ function routeMatch(path,pattern){
   const named={};
   for(let i=0;i<b.length;i++) {if(b[i].startsWith(':'))named[b[i].slice(1)]=a[i]; else if(a[i]!==b[i])return null;}
   return named;
+}
+async function scopedSession(request,env,id,event=false){
+ const token=cookie(request);if(!/^[0-9a-f]{64}$/.test(token))throw new HttpError(401,'Bitte anmelden.');
+ const resource=event?'LEFT JOIN training_events e ON e.id=? LEFT JOIN groups g ON g.id=e.group_id':'LEFT JOIN groups g ON g.id=?';
+ const row=await env.DB.prepare(`SELECT u.id AS user_id,g.id AS group_id,${event?'e.id AS event_id,e.start_at,':''}m.user_id IS NOT NULL AS is_member,CASE WHEN a.user_id IS NOT NULL OR lm.user_id IS NOT NULL THEN 'trainer' ELSE m.role END AS role FROM sessions s JOIN users u ON u.id=s.user_id ${resource} LEFT JOIN memberships m ON m.group_id=g.id AND m.user_id=u.id LEFT JOIN platform_admins a ON a.user_id=u.id LEFT JOIN location_managers lm ON lm.location_id=g.location_id AND lm.user_id=u.id WHERE s.token_hash=? AND s.expires_at>?`).bind(id,await hashToken(token),new Date().toISOString()).first();
+ if(!row)throw new HttpError(401,'Bitte anmelden.');
+ pickId(id);
+ if(event&&!row.event_id)throw new HttpError(404,'Termin nicht gefunden.');
+ if(!row.group_id||!row.role)throw new HttpError(403,'Keine Berechtigung für diese Gruppe.');return row;
 }
 async function api(request,env) {
   checkOrigin(request);
@@ -253,6 +260,16 @@ async function api(request,env) {
     ]);
     return json({ok:true},200,{'set-cookie':cookieAttrs(request,true)});
   }
+  const hotEvents=routeMatch(path,'/api/groups/:groupId/events');
+  if(hotEvents&&method==='GET'){
+    const gid=hotEvents.groupId,scope=await scopedSession(request,env,gid);
+    return json({events:await listEvents(env,gid,scope.user_id,scope.role,u.searchParams)});
+  }
+  const hotBooking=routeMatch(path,'/api/events/:eventId/rsvp');
+  if(hotBooking&&method==='POST'){
+    const eid=hotBooking.eventId,scope=await scopedSession(request,env,eid,true),data=await params(request);
+    return json({ok:true,...await bookTraining(env,scope.user_id,eid,data.status===null?null:validStatus(data.status),scope)});
+  }
   const user=await requireUser(request,env);
   if(path==='/api/locations'&&method==='GET')return json(await locationData(env,user.id));
   if(path==='/api/locations'&&method==='POST'){
@@ -365,7 +382,6 @@ async function api(request,env) {
   route=routeMatch(path,'/api/groups/:groupId/events');
   if(route) {
     const gid=pickId(route.groupId);const role=await membership(env,user.id,gid);
-    if(method==='GET')return json({events:await listEvents(env,gid,user.id,role,u.searchParams)});
     if(method==='POST') {
       if(role!=='trainer')throw new HttpError(403,'Nur Trainer dürfen Termine anlegen.');
       return json(await createTraining(env,user,gid,await params(request)),201);
@@ -396,12 +412,6 @@ async function api(request,env) {
     const old=await env.DB.prepare('SELECT capacity FROM training_events WHERE id=?').bind(eid).first(),e=eventInput({...data,capacity:data.capacity===undefined?old.capacity:data.capacity});
     try{await env.DB.batch([env.DB.prepare('UPDATE training_events SET title=?,start_at=?,location=?,notes=?,capacity=? WHERE id=?').bind(e.title,e.startAt,e.location,e.notes,e.capacity,eid),promotion(env,eid),enqueueEventChange(env,eid,'changed')]);}catch(error){if(String(error).includes('Capacity below'))throw new HttpError(409,'Das Limit darf bestätigte Plätze nicht unterschreiten.');throw error;}
     return json({ok:true});
-  }
-  route=routeMatch(path,'/api/events/:eventId/rsvp');
-  if(route&&method==='POST') {
-    const eid=pickId(route.eventId),context=await eventWithRole(env,user.id,eid);
-    const data=await params(request);
-    return json({ok:true,...await bookTraining(env,user.id,eid,data.status===null?null:validStatus(data.status),context.event)});
   }
   route=routeMatch(path,'/api/events/:eventId/participants');
   if(route&&method==='GET') {

@@ -5,10 +5,18 @@ Die geprüften Kernfunktionen und die erste regionale Ausbaustufe sind veröffen
 - App und öffentliche Demo: https://teamzeit.yousef-alhabod.de
 - Quellcode: https://github.com/YousefAlhabod/teamzeit-fullstack
 - Portfolio: https://yousef-alhabod.de/#teamzeit
-- Produktionsversion: 0e8ef469-770d-422d-bf84-50125e55a411
+- Produktionsversion: 29dd3150-3065-46a8-8913-9e9a14737125
 - Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; fünf Migrationen angewendet.
 
-## Regionale Ausbaustufe
+## Nachfolgende gezielte Performance-Optimierung
+
+Nur Authentifizierungs-/Berechtigungsabfragen und Buchungsrückgabe optimiert; kein Redesign, keine neuen Produktfunktionen, keine Datenmigration. 32 Regressionstests erfolgreich. Echter privater Cloudflare-Staging-Vergleich mit je 1.000 aktiven API-Nutzern für 120 Sekunden: p95 Abfrage 171→119 ms, Buchung 244→138 ms, Absage 261→143 ms, API-Fehler insgesamt 2,971→0 %. Zusätzlich harte gleichzeitige Buchungsspitze: p95 5.443→3.842 ms. 50 bestätigte Plätze, 950 Wartende, keine Überbuchung oder unberechtigte Buchung und keine Test-E-Mails.
+
+Nach erfolgreichen GitHub-Regressionstests veröffentlicht. Privater Produktions-Export vor Deployment; Fingerprints aller bestehenden Geschäftstabellen nach Deployment identisch, einschließlich Konten, Einladungen, Buchungen, Standorten, Rollen und Serien. Öffentliche Oberflächendateien gegenüber 1ed53ad unverändert. Kein Lasttest auf Produktion. Temporäre Staging-Sitzungen, Antworten und Zähler nach dem Test entfernt; getrennte synthetische Fixture für autorisierte Wiederholungen erhalten.
+
+Gesamtziel weiterhin nicht erreicht: 39,4 % HTTP-503-Ressourcenlimitfehler bei den separaten 1.000 echten Anmeldeversuchen. Höheres CPU-Limit wurde für den Free-Plan vom Anbieter abgewiesen; kein Tarifwechsel, keine Abschwächung der Passwortprüfung. Vollständige Methodik und Nachweise: [Performance-Optimierung](PERFORMANCE_OPTIMIZATION.md).
+
+## Nachweise der regionalen Ausbaustufe
 
 - Additive Datenstruktur für Standorte, Standortverantwortliche, Plattformadministratoren und Trainingsserien. Bestehende Gruppen zunächst beim Platzhalterstandort. Das bereits vorhandene persönliche Betreiberkonto ist Plattformadministrator; keine neuen produktiven Benutzerkonten erzeugt.
 - Mehrere Trainer je Gruppe, bis zu 26 wöchentliche Termine mit stabiler Berliner Ortszeit, einzelne Termine bearbeiten/absagen, Kapazitätslimit und atomare Warteliste mit Nachrücken. Standort- und Datumsfilter sowie begrenzte Terminseiten. Neue regionale Gruppen werden von der zuständigen Verwaltung angelegt.
