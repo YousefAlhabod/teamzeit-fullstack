@@ -283,9 +283,11 @@ async function api(request,env) {
     const r=await env.DB.prepare('UPDATE locations SET name=?,city=? WHERE id=?').bind(textField(d.name,'Standortname',80),textField(d.city||'','Stadt',80,false),lid).run();if(!r.meta.changes)throw new HttpError(404,'Standort nicht gefunden.');return json({ok:true});
   }
   if(path==='/api/me/export'&&method==='GET') {
-    const groups=await env.DB.prepare('SELECT g.name,m.role,m.joined_at FROM memberships m JOIN groups g ON g.id=m.group_id WHERE m.user_id=?').bind(user.id).all();
-    const responses=await env.DB.prepare('SELECT e.title,e.start_at,r.status,r.updated_at FROM responses r JOIN training_events e ON e.id=r.event_id WHERE r.user_id=?').bind(user.id).all();
-    return json({user:publicUser(user),groups:groups.results,responses:responses.results});
+    const groups=await env.DB.prepare('SELECT g.name,m.role,m.joined_at,l.name AS location,l.city FROM memberships m JOIN groups g ON g.id=m.group_id JOIN locations l ON l.id=g.location_id WHERE m.user_id=?').bind(user.id).all();
+    const responses=await env.DB.prepare('SELECT e.title,e.start_at,r.status,r.booking_state,r.queued_at,r.updated_at FROM responses r JOIN training_events e ON e.id=r.event_id WHERE r.user_id=?').bind(user.id).all();
+    const settings=await env.DB.prepare('SELECT training_notifications FROM users WHERE id=?').bind(user.id).first();
+    const managed=await env.DB.prepare('SELECT l.name,l.city FROM location_managers m JOIN locations l ON l.id=m.location_id WHERE m.user_id=?').bind(user.id).all();
+    return json({user:publicUser(user),groups:groups.results,responses:responses.results,trainingNotifications:!!settings.training_notifications,access:{platformAdmin:await isAdmin(env,user.id),managedLocations:managed.results,projectReviewer:!!await env.DB.prepare('SELECT user_id FROM project_access WHERE user_id=?').bind(user.id).first()}});
   }
   if(path==='/api/groups'&&method==='POST') {
     const data=await params(request),id=crypto.randomUUID();
@@ -323,12 +325,15 @@ async function api(request,env) {
     const gid=pickId(groupRoute.groupId);await requireTrainer(env,user.id,gid);
     if(method==='PATCH'){
       const data=await params(request);
+      const name=textField(data.name,'Gruppenname',MAX_TEXT.group),description=textField(data.description||'','Beschreibung',800,false);
+      let locationId;
       if(data.locationId){
         const old=await env.DB.prepare('SELECT location_id FROM groups WHERE id=?').bind(gid).first(),lid=pickId(data.locationId);
         await manageLocation(env,user.id,old.location_id);await manageLocation(env,user.id,lid);
-        await env.DB.prepare('UPDATE groups SET location_id=? WHERE id=?').bind(lid,gid).run();
+        if(!await env.DB.prepare('SELECT id FROM locations WHERE id=?').bind(lid).first())throw new HttpError(404,'Standort nicht gefunden.');
+        locationId=lid;
       }
-      await env.DB.prepare('UPDATE groups SET name=?,description=? WHERE id=?').bind(textField(data.name,'Gruppenname',MAX_TEXT.group),textField(data.description||'','Beschreibung',800,false),gid).run();return json({ok:true});
+      await env.DB.prepare('UPDATE groups SET name=?,description=?,location_id=COALESCE(?,location_id) WHERE id=?').bind(name,description,locationId||null,gid).run();return json({ok:true});
     }
     await env.DB.prepare('DELETE FROM groups WHERE id=?').bind(gid).run();return json({ok:true});
   }

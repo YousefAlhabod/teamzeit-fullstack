@@ -31,6 +31,9 @@ test('regional roles, capacity, FIFO waitlist and notification outbox',async t=>
    await req(admin,'/api/admin/access','POST',{email:reviewer.email,role:'project_reviewer',enabled:true});
    assert.equal((await request(reviewer,'/projekt')).status,200);await req(reviewer,`/api/groups/${g}/events`,'GET',undefined,403);
    assert.ok((await req(manager,'/api/me')).groups.some(x=>x.id===g));assert.ok(!(await req(manager,'/api/me')).groups.some(x=>x.id===foreign));
+   await req(admin,`/api/groups/${g}`,'PATCH',{name:'',locationId:b},400);
+   assert.equal((await db.prepare('SELECT location_id FROM groups WHERE id=?').bind(g).first()).location_id,h);
+   assert.equal((await req(manager,'/api/me/export')).access.managedLocations[0].city,'Hannover');
   });
   const input={title:'Limittraining',startAt:'2027-03-21T17:30:00.000Z',location:'Testhalle',capacity:1,repeatWeeks:3};
   await t.test('weekly creation and date pagination validation',async()=>{
@@ -63,6 +66,17 @@ test('regional roles, capacity, FIFO waitlist and notification outbox',async t=>
    const count=mails.length;await flushNotifications({DB:db,RESEND_API_KEY:'mock-no-real-mails',MAIL_FROM:'TeamZeit <test@example.invalid>'});assert.equal(mails.length,count);
    await req(trainer,`/api/events/${event}`,'DELETE',{});
    assert.equal((await db.prepare("SELECT COUNT(*) n FROM notification_outbox WHERE kind='cancelled' AND user_id=?").bind(other.id).first()).n,1);
+  });
+  await t.test('FIFO survives account deletion and group removal without losing a place',async()=>{
+   const people=await Promise.all([3,4,5].map(i=>user('queue',i)));
+   for(const person of people)await db.prepare("INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,'member')").bind(g,person.id).run();
+   const e=(await req(trainer,`/api/groups/${g}/events`,'POST',{...input,repeatWeeks:1},201)).id;
+   for(const person of people)await req(person,`/api/events/${e}/rsvp`,'POST',{status:'yes'});
+   const queue=(await db.prepare("SELECT user_id FROM responses WHERE event_id=? AND booking_state='waitlisted' ORDER BY queued_at,user_id").bind(e).all()).results;
+   assert.equal(queue.length,2);await req(people[0],'/api/me','DELETE',{});
+   assert.equal((await db.prepare("SELECT user_id FROM responses WHERE event_id=? AND booking_state='confirmed'").bind(e).first()).user_id,queue[0].user_id);
+   await req(trainer,`/api/groups/${g}/members/${queue[0].user_id}`,'DELETE',{});
+   assert.equal((await db.prepare("SELECT user_id FROM responses WHERE event_id=? AND booking_state='confirmed'").bind(e).first()).user_id,queue[1].user_id);
   });
  }finally{await mf.dispose();}
 });

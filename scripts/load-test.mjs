@@ -4,17 +4,22 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {cpus,totalmem,platform,release} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {performance} from 'node:perf_hooks';
+import {Pool,fetch as httpFetch} from 'undici';
 const arg=name=>process.argv.find(x=>x.startsWith('--'+name+'='))?.split('=')[1];
 const n=Number(arg('users')||1000),ramp=Number(arg('ramp')||60);
+const auth=arg('auth')||'password';if(!['password','seeded'].includes(auth))throw Error('Use --auth=password or --auth=seeded (API-only diagnostic).');
+const connections=Number(arg('connections')||128);if(!Number.isInteger(connections)||connections<1||connections>1000)throw Error('Use --connections=1..1000. Queue time is included in latency.');
 if(!Number.isInteger(n)||n<10||n>1000||!Number.isFinite(ramp)||ramp<1||ramp>120)throw Error('Use --users=10..1000 --ramp=1..120. No remote targets are supported.');
 const f=await fixture(),{mf,db}=f,users=[],groups=[],samples=[],invariants=[],started=performance.now();let inFlight=0,maxInFlight=0,monitor;
+const endpoint=await mf.ready,pool=new Pool(endpoint.origin,{connections,pipelining:1,headersTimeout:180000,bodyTimeout:180000,connectTimeout:30000});
+const sourceHash=createHash('sha256').update(['src/worker.js','src/platform.js','migrations/0005_regional_training.sql'].map(p=>readFileSync(p,'utf8')).join('\n')).digest('hex');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const jitter=(i,r)=>((i*7919+r*104729)%4501)+500;
 const summary=rows=>{const a=rows.map(x=>x.ms).sort((a,b)=>a-b),p=q=>Math.round(a[Math.max(0,Math.ceil(a.length*q)-1)]||0),errors=rows.filter(x=>!x.ok).length;return {requests:rows.length,errors,errorPercent:rows.length?+(errors*100/rows.length).toFixed(3):0,p50:p(.5),p95:p(.95),p99:p(.99),max:p(1),targetMet:!!rows.length&&p(.95)<2000&&errors/rows.length<.01};};
 async function timed(c,path,method,body,operation,expected=200){
  const start=performance.now();inFlight++;maxInFlight=Math.max(maxInFlight,inFlight);let status=0,data,error;
- try{const r=await f.request(c,path,method,body);status=r.status;data=await r.json();if(operation==='login'&&status===200)c.cookie=r.headers.get('set-cookie')?.split(';')[0];if(status!==expected)error=data.error;}catch(e){error=String(e).slice(0,160);}
- finally{inFlight--;samples.push({operation,status,error,ok:status===expected,ms:+(performance.now()-start).toFixed(2)});}return data;
+ try{const r=await httpFetch(new URL(path,endpoint),{dispatcher:pool,method,headers:{Origin:endpoint.origin,'cf-connecting-ip':c.ip,...(c.cookie?{Cookie:c.cookie}:{}),...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body===undefined?undefined:JSON.stringify(body)});status=r.status;data=await r.json();if(operation==='login'&&status===200){c.cookie=r.headers.get('set-cookie')?.split(';')[0];if(!c.cookie)error='Missing session cookie';}if(status!==expected)error=data.error;}catch(e){error=[e,e.cause,e.cause?.cause].filter(Boolean).map(x=>[x.code,x.message||String(x)].filter(Boolean).join(': ')).join(' | ').slice(0,500);}
+ finally{inFlight--;samples.push({operation,status,error,ok:status===expected&&!error,ms:+(performance.now()-start).toFixed(2)});}return data;
 }
 try{
  const locations=Array.from({length:3},()=>randomUUID());
@@ -30,14 +35,14 @@ try{
  for(let i=0;i<n;i+=40)await db.batch(users.slice(i,i+40).map((u,j)=>{const index=i+j;u.group=groups[Math.floor(index/20)];return db.prepare('INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,?)').bind(u.group.id,u.id,index%20===0?'trainer':'member');}));
  console.log(`Isolated fixture ready: ${n} users, ${groupCount} groups, ${groupCount*12} events. Real email unavailable.`);
  const loginStart=performance.now();
- await Promise.all(users.map(async(u,i)=>{await sleep(i*ramp*1000/n);await timed(u,'/api/auth/login','POST',{email:u.email,password:u.password},'login');}));
+ if(auth==='password')await Promise.all(users.map(async(u,i)=>{await sleep(i*ramp*1000/n);await timed(u,'/api/auth/login','POST',{email:u.email,password:u.password},'login');}));
  const loginSeconds=(performance.now()-loginStart)/1000,loginSuccess=users.filter(u=>u.cookie).length,seeded=n-loginSuccess;
  for(const u of users.filter(u=>!u.cookie)){
   const token=randomBytes(32).toString('hex');u.cookie=`teamzeit_session=${token}`;
   await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').bind(createHash('sha256').update(token).digest('hex'),u.id,new Date(Date.now()+86400000).toISOString()).run();
  }
  const active=users;
- console.log(`Login ramp complete: ${loginSuccess}/${n} logins, ${loginSeconds.toFixed(1)}s; ${seeded} isolated fixture sessions added after failed logins. Starting ${active.length} active users.`);
+ console.log(`${auth==='password'?'Login ramp complete':'API-only diagnostic, no login test'}: ${loginSuccess}/${n} logins, ${loginSeconds.toFixed(1)}s; ${seeded} isolated fixture sessions prepared. Starting ${active.length} active users.`);
  monitor=setInterval(async()=>{try{const bad=await db.prepare("SELECT e.id FROM training_events e JOIN responses r ON r.event_id=e.id AND r.booking_state='confirmed' WHERE e.capacity IS NOT NULL GROUP BY e.id HAVING COUNT(*)>e.capacity LIMIT 1").first();if(bad)invariants.push('overbooking');}catch{invariants.push('monitor_failed');}},1000);
  const mixedStart=performance.now();
  await Promise.all(active.map(async(u,i)=>{
@@ -60,8 +65,8 @@ try{
  if(confirmed!==Math.min(50,active.length)||confirmed+waiting!==active.length)invariants.push('contention_count_mismatch');
  const plans={events:await db.prepare('EXPLAIN QUERY PLAN SELECT id FROM training_events WHERE group_id=? AND start_at>=? ORDER BY start_at LIMIT 150').bind(groups[0].id,'2027').all(),queue:await db.prepare("EXPLAIN QUERY PLAN SELECT user_id FROM responses WHERE event_id=? AND booking_state='waitlisted' ORDER BY queued_at,user_id LIMIT 1").bind(hotEvent).all()};
  const operations=Object.fromEntries([...new Set(samples.map(x=>x.operation))].map(op=>[op,summary(samples.filter(x=>x.operation===op))]));
- const report={at:new Date().toISOString(),environment:{kind:'isolated local Miniflare + workerd + D1 SQLite',platform:platform(),release:release(),node:process.version,cpu:cpus()[0]?.model,logicalCpus:cpus().length,memoryGB:+(totalmem()/2**30).toFixed(1),uvThreadpool:process.env.UV_THREADPOOL_SIZE||'default (4)',commit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),sourceHash:createHash('sha256').update(['src/worker.js','src/platform.js','migrations/0005_regional_training.sql'].map(p=>readFileSync(p,'utf8')).join('\n')).digest('hex')},scenario:{users:n,activeUsers:active.length,loginSuccess,fixtureSessionsAfterFailedLogins:seeded,groups:groupCount,events:groupCount*12,rampSeconds:ramp,loginSeconds:+loginSeconds.toFixed(2),mixedSeconds:+mixedSeconds.toFixed(2),contentionSeconds:+contentionSeconds.toFixed(2),maxInFlight,thinkMs:'deterministic 500..5000',realMail:false,remoteDatabase:false},operations,overall:summary(samples.filter(x=>x.operation!=='security')),invariants:{violations:invariants,hotConfirmed:confirmed,hotWaitlisted:waiting},queryPlans:plans,production1000UsersProven:false,totalSeconds:+((performance.now()-started)/1000).toFixed(2),samples};
+ const report={at:new Date().toISOString(),environment:{kind:'isolated local Miniflare + workerd + D1 SQLite',platform:platform(),release:release(),node:process.version,cpu:cpus()[0]?.model,logicalCpus:cpus().length,memoryGB:+(totalmem()/2**30).toFixed(1),uvThreadpool:process.env.UV_THREADPOOL_SIZE||'default (4)',commit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),sourceHash},scenario:{users:n,activeUsers:active.length,authMode:auth,transportConnections:connections,loginSuccess,seededSessions:seeded,fixtureSessionsAfterFailedLogins:auth==='password'?seeded:0,groups:groupCount,events:groupCount*12,rampSeconds:ramp,loginSeconds:+loginSeconds.toFixed(2),mixedSeconds:+mixedSeconds.toFixed(2),contentionSeconds:+contentionSeconds.toFixed(2),maxInFlight,thinkMs:'deterministic 500..5000',realMail:false,remoteDatabase:false},operations,overall:summary(samples.filter(x=>x.operation!=='security')),invariants:{violations:invariants,hotConfirmed:confirmed,hotWaitlisted:waiting},queryPlans:plans,production1000UsersProven:false,totalSeconds:+((performance.now()-started)/1000).toFixed(2),samples};
  mkdirSync('test-results',{recursive:true});const path=`test-results/load-${n}-${Date.now()}.json`;writeFileSync(path,JSON.stringify(report,null,2));
  console.log(JSON.stringify({...report,samples:undefined,queryPlans:undefined},null,2));console.log('Detailed measurements:',path);
- if(loginSuccess!==n||invariants.length||Object.values(operations).some(x=>!x.targetMet))process.exitCode=2;
-}finally{if(monitor)clearInterval(monitor);await mf.dispose();}
+ if((auth==='password'&&loginSuccess!==n)||invariants.length||Object.values(operations).some(x=>!x.targetMet))process.exitCode=2;
+}finally{if(monitor)clearInterval(monitor);await pool.close();await mf.dispose();}
