@@ -3,7 +3,7 @@ const root=document.getElementById('app-root');
 const modal=document.getElementById('modal');
 const modalContent=document.getElementById('modal-content');
 const toastNode=document.getElementById('toast');
-const state={mode:null,user:null,group:null,groups:[],events:[],members:[],demoRole:'trainer',panel:'events',invite:null,emailInvitations:[],invitePreview:null,loading:false};
+const state={mode:null,user:null,group:null,groups:[],locations:[],admin:false,locationFilter:'',dateFrom:'',dateTo:'',offset:0,events:[],members:[],demoRole:'trainer',panel:'events',invite:null,emailInvitations:[],invitePreview:null,loading:false};
 const incoming=new URLSearchParams(location.hash.slice(1));
 let incomingInvite=incoming.get('invite')||'';
 let resetToken=incoming.get('reset')||'';
@@ -88,27 +88,47 @@ async function renderAuth(){
     <div class="auth-toggle">${isLogin?'<button class="link-button" data-action="auth-forgot">Passwort vergessen?</button>':''}${!isSetup?`<button class="link-button" data-action="auth-${isLogin?'register':'login'}">${isLogin?'Einladung erhalten? Registrieren':'Bereits registriert? Anmelden'}</button>`:''}<button class="link-button" data-action="start-demo">Ohne Anmeldung testen</button></div></div>`;
 }
 async function loadLive(){
- const me=await call('/me');state.user=me.user;state.groups=me.groups;state.group=me.groups.find(g=>g.id===state.group?.id)||me.groups[0]||null;state.mode='live';state.panel='events';state.invite=null;state.emailInvitations=[];
+ const me=await call('/me');state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.locations=me.locations;state.group=me.groups.find(g=>g.id===state.group?.id)||me.groups[0]||null;state.mode='live';state.panel='events';state.invite=null;state.emailInvitations=[];
  if(state.group){const events=await call(`/groups/${state.group.id}/events`);state.events=events.events}else state.events=[];
  renderApp();scrollApp();
+}
+async function loadEvents(){
+ if(!state.group)return [];
+ const q=new URLSearchParams({offset:String(state.offset)});
+ if(state.dateFrom)q.set('from',berlinToUtc(state.dateFrom+'T00:00'));
+ if(state.dateTo)q.set('to',berlinToUtc(state.dateTo+'T23:59'));
+ return (await call(`/groups/${state.group.id}/events?${q}`)).events;
+}
+function showLocationManagement(){
+ const opts=state.locations.filter(l=>l.canManage).map(l=>`<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)}${l.city?' · '+escapeHtml(l.city):''}</option>`).join('');
+ const groupOpts=opts.replace(`value="${state.group?.locationId}"`,`value="${state.group?.locationId}" selected`);
+ openDialog(`<h3>Standorte & Zuständigkeiten</h3><p>Trainer und Mitglieder werden weiterhin in ihrer Gruppe verwaltet. Standortverantwortliche verwalten ausschließlich Gruppen ihres Standorts; Plattformadministratoren alle Standorte. Reviewer erhalten nur Projektzugriff.</p>
+ ${state.admin?'<form id="location-create" class="form-stack"><h4>Standort anlegen</h4><label>Standortname<input name="name" maxlength="80" required placeholder="Trainingszentrum Hannover"></label><label>Stadt<input name="city" maxlength="80" required placeholder="Hannover"></label><p data-form-error class="inline-alert" hidden></p><button class="btn btn-primary" type="submit">Standort anlegen</button></form>':''}
+ <form id="location-edit" class="form-stack"><h4>Standort bearbeiten</h4><label>Standort<select name="locationId" required>${opts}</select></label><label>Neuer Name<input name="name" maxlength="80" required></label><label>Stadt<input name="city" maxlength="80" required></label><p data-form-error class="inline-alert" hidden></p><button class="btn btn-secondary" type="submit">Standort speichern</button></form>
+ ${state.group&&state.locations.some(l=>l.id===state.group.locationId&&l.canManage)?`<form id="group-location" class="form-stack"><h4>Gruppe ${escapeHtml(state.group.name)} zuordnen</h4><label>Zielstandort<select name="locationId">${groupOpts}</select></label><p data-form-error class="inline-alert" hidden></p><button class="btn btn-secondary" type="submit">Gruppe verschieben</button></form>`:''}
+ ${state.admin?`<form id="access-form" class="form-stack"><h4>Zuständigkeit vergeben oder entziehen</h4><label>E-Mail des bestehenden Kontos<input name="email" type="email" required></label><label>Rolle<select name="role"><option value="location_manager">Standortverantwortlicher</option><option value="platform_admin">Plattformadministrator</option><option value="project_reviewer">Projekt-Reviewer (keine Sportrechte)</option></select></label><label>Standort (nur für Standortverantwortliche)<select name="locationId">${opts}</select></label><label>Aktion<select name="enabled"><option value="true">Vergeben</option><option value="false">Entziehen</option></select></label><p data-form-error class="inline-alert" hidden></p><button class="btn btn-secondary" type="submit">Zuständigkeit speichern</button></form>`:''}`);
+}
+function platformTools(){
+ if(state.mode!=='live')return '';
+ return `<div class="training-filters"><label>Standort<select id="location-filter"><option value="">Alle meine Standorte</option>${state.locations.map(l=>`<option value="${escapeHtml(l.id)}" ${state.locationFilter===l.id?'selected':''}>${escapeHtml(l.name)}${l.city?' · '+escapeHtml(l.city):''}</option>`).join('')}</select></label>${state.admin||state.locations.some(l=>l.canManage)?'<button class="btn btn-secondary" data-action="manage-locations">Standorte & Zuständigkeiten</button>':''}<a href="/projekt">Projektinformationen 🔒</a></div>${state.panel==='events'?`<form id="training-filter" class="training-filters"><label>Von<input type="date" name="from" value="${escapeHtml(state.dateFrom)}"></label><label>Bis<input type="date" name="to" value="${escapeHtml(state.dateTo)}"></label><button class="btn btn-secondary" type="submit">Termine filtern</button><button class="link-button" type="button" data-action="clear-filters">Zurücksetzen</button></form><div class="training-filters"><button class="link-button" data-action="previous-events" ${state.offset===0?'disabled':''}>Vorherige Termine</button><span>Seite ${state.offset/150+1}</span><button class="link-button" data-action="next-events" ${state.events.length<150?'disabled':''}>Weitere Termine</button></div>`:''}`;
 }
 const counts=ev=>state.mode==='demo'?withCounts(ev).counts:ev.counts||{yes:0,no:0,maybe:0};
 const statusName={yes:'Zusage',no:'Absage',maybe:'Vielleicht',open:'Noch offen'};
 function renderEvent(ev){
- const c=counts(ev),trainer=isTrainer();
- return `<article class="event-card"><div class="event-date">${escapeHtml(formatDate(ev.startAt))}</div><h4>${escapeHtml(ev.title)}</h4><p class="event-place">⌖ ${escapeHtml(ev.location)}</p>${ev.notes?`<p class="event-notes">${escapeHtml(ev.notes)}</p>`:''}
- <div class="rsvp-row"><button class="choice yes ${ev.myResponse==='yes'?'active':''}" data-action="rsvp" data-id="${ev.id}" data-status="yes" aria-pressed="${ev.myResponse==='yes'}">✓ Dabei</button><button class="choice no ${ev.myResponse==='no'?'active':''}" data-action="rsvp" data-id="${ev.id}" data-status="no" aria-pressed="${ev.myResponse==='no'}">✕ Absage</button><button class="choice maybe ${ev.myResponse==='maybe'?'active':''}" data-action="rsvp" data-id="${ev.id}" data-status="maybe" aria-pressed="${ev.myResponse==='maybe'}">? Vielleicht</button></div>
- <div class="event-footer"><span class="status-pill ${escapeHtml(ev.myResponse||'open')}">${escapeHtml(statusName[ev.myResponse||'open'])}</span>${trainer?`<strong>✓ ${c.yes} · ✕ ${c.no} · ? ${c.maybe}</strong>`:''}</div>
+ const c=counts(ev),trainer=isTrainer(),bookingDisabled=state.mode==='live'&&!state.group?.membershipRole?'disabled':'';
+ return `<article class="event-card"><div class="event-date">${escapeHtml(formatDate(ev.startAt))}${ev.seriesId?' · Wöchentliche Serie':''}</div><h4>${escapeHtml(ev.title)}</h4><p class="event-place">⌖ ${escapeHtml(ev.location)}</p>${ev.notes?`<p class="event-notes">${escapeHtml(ev.notes)}</p>`:''}${ev.capacity?`<p>${ev.confirmedCount} / ${ev.capacity} Plätze · ${ev.waitlistCount} auf der Warteliste</p>`:''}${ev.myBookingState==='waitlisted'?'<p class="inline-alert">Du stehst auf der Warteliste. Bei einem freien Platz rückst du automatisch nach.</p>':''}
+ <div class="rsvp-row"><button ${bookingDisabled} class="choice yes ${ev.myResponse==='yes'?'active':''}" data-action="rsvp" data-id="${ev.id}" data-status="yes" aria-pressed="${ev.myResponse==='yes'}">✓ Dabei</button><button ${bookingDisabled} class="choice no ${ev.myResponse==='no'?'active':''}" data-action="rsvp" data-id="${ev.id}" data-status="no" aria-pressed="${ev.myResponse==='no'}">✕ Absage</button><button ${bookingDisabled} class="choice maybe ${ev.myResponse==='maybe'?'active':''}" data-action="rsvp" data-id="${ev.id}" data-status="maybe" aria-pressed="${ev.myResponse==='maybe'}">? Vielleicht</button></div>${bookingDisabled?'<p>Verwaltungszugriff. Zum Mittrainieren zuerst der Gruppe beitreten.</p>':''}
+ <div class="event-footer"><span class="status-pill ${escapeHtml(ev.myResponse||'open')}">${ev.myBookingState==='waitlisted'?'Warteliste':escapeHtml(statusName[ev.myResponse||'open'])}</span>${trainer?`<strong>✓ ${c.yes} · ✕ ${c.no} · ? ${c.maybe}</strong>`:''}</div>
  ${trainer?`<div class="event-controls"><button class="link-button" data-action="participants" data-id="${ev.id}">Teilnehmerliste</button><button class="link-button" data-action="edit-event" data-id="${ev.id}">Bearbeiten</button><button class="link-button" data-action="delete-event" data-id="${ev.id}">Löschen</button></div>`:''}</article>`
 }
 function renderApp(){
  if(!state.mode){renderAuth();return}
  const trainer=isTrainer();const heading=state.panel==='settings'?'Gruppeneinstellungen':'Trainingsübersicht';
  const html=`<div class="dashboard">
- <aside class="dash-sidebar"><div class="dash-side-brand">TeamZeit<em>.</em></div><button class="dash-nav ${state.panel==='events'?'active':''}" data-action="panel-events">▦ &nbsp; Trainings</button>${trainer?`<button class="dash-nav ${state.panel==='settings'?'active':''}" data-action="panel-settings">⚙ &nbsp; Gruppe & Einladen</button>`:''}<div class="dash-tag">${state.mode==='demo'?'BEISPIELDATEN · DEMO':trainer?'TRAINER':'MITGLIED'}</div><div class="dash-spacer"></div><button class="btn btn-outline" data-action="${state.mode==='demo'?'end-demo':'logout'}">${state.mode==='demo'?'Demo beenden':'Abmelden'}</button></aside>
+ <aside class="dash-sidebar"><div class="dash-side-brand">TeamZeit<em>.</em></div><button class="dash-nav ${state.panel==='events'?'active':''}" data-action="panel-events">▦ &nbsp; Trainings</button>${trainer?`<button class="dash-nav ${state.panel==='settings'?'active':''}" data-action="panel-settings">⚙ &nbsp; Gruppe & Einladen</button>`:''}<div class="dash-tag">${state.mode==='demo'?'BEISPIELDATEN · DEMO':state.admin?'PLATTFORMADMINISTRATOR':state.locations.some(l=>l.id===state.group?.locationId&&l.canManage)?'STANDORTVERANTWORTLICH':trainer?'TRAINER':'MITGLIED'}</div><div class="dash-spacer"></div><button class="btn btn-outline" data-action="${state.mode==='demo'?'end-demo':'logout'}">${state.mode==='demo'?'Demo beenden':'Abmelden'}</button></aside>
  <div class="dash-main"><div class="dash-top"><div><small>${escapeHtml(state.group?.name||'MEINE GRUPPE')}</small><h3>${heading}</h3></div>${state.panel==='events'&&trainer?'<button class="btn btn-primary" data-action="add-event">+ Termin anlegen</button>':''}</div>
- ${state.mode==='demo'?`<div class="demo-banner"><strong>Interaktive Demo.</strong> Alle Angaben sind Beispiele und werden nur in diesem Browser gespeichert. <div class="switches"><button data-action="demo-role" data-role="trainer" class="${trainer?'selected':''}">Als Trainer ansehen</button><button data-action="demo-role" data-role="member" class="${!trainer?'selected':''}">Als Mitglied ansehen</button><button data-action="reset-demo">Demo zurücksetzen</button></div></div>`:`<div class="group-tools"><label>Gruppe <select id="group-select">${state.groups.map(g=>`<option value="${escapeHtml(g.id)}" ${g.id===state.group?.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}</select></label><button class="link-button" data-action="new-group">Gruppe erstellen</button><button class="link-button" data-action="join-group">Einladung verwenden</button><button class="link-button" data-action="refresh">Aktualisieren</button><button class="link-button" data-action="account">Mein Konto</button></div>`}
- ${state.panel==='events'?`<div class="event-grid">${state.events.length?state.events.map(renderEvent).join(''):'<div class="empty-state"><strong>Noch keine Trainingstermine</strong>Ein Trainer kann den ersten Termin anlegen.</div>'}</div>`:renderSettings()}
+ ${state.mode==='demo'?`<div class="demo-banner"><strong>Interaktive Demo.</strong> Alle Angaben sind Beispiele und werden nur in diesem Browser gespeichert. <div class="switches"><button data-action="demo-role" data-role="trainer" class="${trainer?'selected':''}">Als Trainer ansehen</button><button data-action="demo-role" data-role="member" class="${!trainer?'selected':''}">Als Mitglied ansehen</button><button data-action="reset-demo">Demo zurücksetzen</button></div></div>`:`<div class="group-tools"><label>Gruppe <select id="group-select">${state.groups.filter(g=>!state.locationFilter||g.locationId===state.locationFilter).map(g=>`<option value="${escapeHtml(g.id)}" ${g.id===state.group?.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}</select></label>${state.admin||state.locations.some(l=>l.canManage)||(trainer&&state.group?.locationId==='00000000-0000-4000-8000-000000000001')?'<button class="link-button" data-action="new-group">Gruppe erstellen</button>':''}<button class="link-button" data-action="join-group">Einladung verwenden</button><button class="link-button" data-action="refresh">Aktualisieren</button><button class="link-button" data-action="account">Mein Konto</button></div>`}
+ ${platformTools()}${state.panel==='events'?`<div class="event-grid">${state.events.length?state.events.map(renderEvent).join(''):'<div class="empty-state"><strong>Keine passenden Trainingstermine</strong>Filter ändern oder einen Termin anlegen.</div>'}</div>`:renderSettings()}
  </div></div>`;
  root.innerHTML=html;
  document.getElementById('nav-auth').textContent=state.mode==='demo'?'Demo geöffnet':myName();
@@ -129,7 +149,7 @@ function renderEmailInviteSettings(){
  <ul class="email-invite-list">${state.emailInvitations.length?state.emailInvitations.map(item=>`<li class="email-invite-item"><div><strong>${escapeHtml(item.email)}</strong><p><span class="status-pill ${item.status==='accepted'?'yes':item.status==='expired'?'no':'maybe'}">${labels[item.status]}</span> <span>${escapeHtml(delivery[item.deliveryStatus]||'')}</span></p><small>Gültig bis ${escapeHtml(formatDate(item.expiresAt))}${item.acceptedAt?` · Angenommen am ${escapeHtml(formatDate(item.acceptedAt))}`:''}</small></div>${item.status!=='accepted'?`<button class="btn btn-secondary" data-action="resend-email-invite" data-id="${escapeHtml(item.id)}" ${!item.canResend?'disabled':''}>Erneut senden</button>`:''}</li>`).join(''):'<li>Noch keine persönlichen E-Mail-Einladungen.</li>'}</ul><small>Letzte 100 Einladungen. Historie bis 30 Tage nach Ablauf, anschließend tägliche Bereinigung.</small></div>`;
 }
 async function refreshEmailInvites(){
- state.emailInvitations=state.mode==='live'?(await call(`/groups/${state.group.id}/email-invites`)).invitations:[];
+ state.emailInvitations=state.mode==='live'&&state.group?(await call(`/groups/${state.group.id}/email-invites`)).invitations:[];
 }
 function emailInviteResult(results){
  const labels={sent:'Versendet',failed:'Versand nicht bestätigt – bitte später erneut senden',already_member:'Bereits Gruppenmitglied',cooldown:'Bitte mindestens 60 Sekunden warten',daily_limit:'Tageslimit für diese Adresse erreicht',changed:'Einladung wurde inzwischen geändert – bitte aktualisieren'};
@@ -139,24 +159,26 @@ function showEventForm(id){
  if(!isTrainer())return notify('Nur Trainer können Termine anlegen.',true);
  const event=state.events.find(e=>e.id===id),edit=!!event;
  const next=event?.startAt||new Date(Date.now()+2*24*3600*1000).toISOString();
- openDialog(`<h3>${edit?'Termin bearbeiten':'Neuen Termin anlegen'}</h3><p>Die Traineransicht von TeamZeit (US01).</p>
+ openDialog(`<h3>${edit?'Termin bearbeiten':'Neuen Termin anlegen'}</h3><p>${edit&&event.seriesId?'Änderungen gelten nur für diesen einzelnen Termin der Serie.':'Plane ein Training für die ausgewählte Gruppe.'}</p>
  <form class="form-stack" id="event-form" data-event-id="${edit?event.id:''}">
  <label>Titel<input name="title" maxlength="100" required value="${escapeHtml(event?.title||'Vereinstraining')}"></label>
  <label>Datum & Uhrzeit (Europe/Berlin)<input name="startAt" type="datetime-local" required value="${escapeHtml(inputDate(next))}"></label>
  <label>Ort<input name="location" maxlength="120" required value="${escapeHtml(event?.location||'Sporthalle')}"></label>
  <label>Hinweise (optional)<textarea name="notes" maxlength="800">${escapeHtml(event?.notes||'')}</textarea></label>
+ <label>Teilnehmerlimit (leer = unbegrenzt)<input name="capacity" type="number" min="1" max="1000" value="${event?.capacity??''}"></label>
+ ${!edit?'<label>Wöchentlich wiederholen<select name="repeatWeeks"><option value="1">Einzeltermin</option><option value="4">4 Termine</option><option value="8">8 Termine</option><option value="12">12 Termine</option><option value="26">26 Termine</option></select></label><p>Alle Termine behalten die Ortszeit Europe/Berlin, auch beim Wechsel der Sommerzeit. Einzelne Termine lassen sich anschließend bearbeiten.</p>':''}
  <p class="inline-alert" data-form-error hidden></p><button class="btn btn-primary" type="submit">${edit?'Änderungen speichern':'Training erstellen'}</button></form>`);
 }
 async function saveEvent(form){
  const data=Object.fromEntries(new FormData(form));
- const iso=berlinToUtc(data.startAt);const input={title:data.title,startAt:iso,location:data.location,notes:data.notes};
+ const iso=berlinToUtc(data.startAt);const input={title:data.title,startAt:iso,location:data.location,notes:data.notes,capacity:data.capacity?Number(data.capacity):null,repeatWeeks:Number(data.repeatWeeks||1)};
  if(state.mode==='demo'){
   if(form.dataset.eventId){const ev=state.events.find(e=>e.id===form.dataset.eventId);Object.assign(ev,input)}
   else state.events.push({...input,id:'demo-'+crypto.randomUUID(),groupId:'demo',myResponse:null,people:[{name:'Yousef',status:'open'},{name:'Vanessa',status:'open'},{name:'Suzana',status:'open'},{name:'Stefan',status:'open'},{name:'Ünal',status:'open'}]});
   saveDemo();
  }else if(form.dataset.eventId){await call(`/events/${form.dataset.eventId}`,'PATCH',input)}
  else await call(`/groups/${state.group.id}/events`,'POST',input);
- if(state.mode==='live')state.events=(await call(`/groups/${state.group.id}/events`)).events;
+ if(state.mode==='live')state.events=await loadEvents();
  closeDialog();renderApp();notify('Termin gespeichert.');
 }
 async function rsvp(id,status){
@@ -164,8 +186,8 @@ async function rsvp(id,status){
    const ev=state.events.find(e=>e.id===id);if(!ev)return;
    ev.myResponse=status;const row=ev.people.find(p=>p.name==='Yousef');if(row)row.status=status;
    saveDemo();
- }else {await call(`/events/${id}/rsvp`,'POST',{status});state.events=(await call(`/groups/${state.group.id}/events`)).events;}
- renderApp();notify(`Antwort gespeichert: ${statusName[status]}.`);
+ }else {await call(`/events/${id}/rsvp`,'POST',{status});state.events=await loadEvents();}
+ renderApp();notify(state.events.find(e=>e.id===id)?.myBookingState==='waitlisted'?'Auf der Warteliste eingetragen.':`Antwort gespeichert: ${statusName[status]}.`);
 }
 async function showParticipants(id){
  if(!isTrainer())return notify('Die Teilnehmerliste ist nur für Trainer sichtbar.',true);
@@ -173,14 +195,14 @@ async function showParticipants(id){
  if(state.mode==='demo'){const ev=state.events.find(e=>e.id===id);people=ev?.people||[]}
  else people=(await call(`/events/${id}/participants`)).participants;
  const title=state.events.find(e=>e.id===id)?.title||'Training';
- openDialog(`<h3>Teilnehmerliste</h3><p>${escapeHtml(title)} · Nur für Trainer</p><table class="participant-table"><thead><tr><th>Mitglied</th><th>Rückmeldung</th></tr></thead><tbody>${people.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td><span class="status-pill ${escapeHtml(p.status)}">${escapeHtml(statusName[p.status]||'Noch offen')}</span></td></tr>`).join('')}</tbody></table><p>${people.length} Gruppenmitglieder · Stand: ${escapeHtml(new Date().toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin'}))}</p><button class="btn btn-secondary" data-action="participants" data-id="${escapeHtml(id)}">Liste aktualisieren</button>`);
+ openDialog(`<h3>Teilnehmerliste</h3><p>${escapeHtml(title)} · Nur für Trainer</p><table class="participant-table"><thead><tr><th>Mitglied</th><th>Rückmeldung</th></tr></thead><tbody>${people.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td><span class="status-pill ${escapeHtml(p.status)}">${escapeHtml(p.bookingState==='waitlisted'?'Warteliste':statusName[p.status]||'Noch offen')}</span></td></tr>`).join('')}</tbody></table><p>${people.length} Gruppenmitglieder · Stand: ${escapeHtml(new Date().toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin'}))}</p><button class="btn btn-secondary" data-action="participants" data-id="${escapeHtml(id)}">Liste aktualisieren</button>`);
 }
 async function deleteEvent(id){
  if(!isTrainer())return;
  const event=state.events.find(e=>e.id===id);if(!event)return;
  if(!confirm(`Termin „${event.title}“ wirklich löschen?`))return;
  if(state.mode==='demo'){state.events=state.events.filter(e=>e.id!==id);saveDemo()}
- else {await call(`/events/${id}`,'DELETE');state.events=(await call(`/groups/${state.group.id}/events`)).events}
+ else {await call(`/events/${id}`,'DELETE');state.events=await loadEvents()}
  renderApp();notify('Termin gelöscht.');
 }
 async function performAction(button){
@@ -200,8 +222,13 @@ async function performAction(button){
    try{const result=await call(`/groups/${state.group.id}/email-invites/${id}/resend`,'POST',{expiresInDays:Number(document.getElementById('email-invite-days')?.value||7)});state.emailInvitations=result.invitations;renderApp();emailInviteResult(result.results);}finally{button.disabled=false;}return;
  }
  if(action==='account'){
-  openDialog('<h3>Mein Konto</h3><p>Sie können Ihre gespeicherten Konto- und Teilnahmedaten abrufen oder das Konto löschen.</p><button class="btn btn-secondary" data-action="export-account">Datenexport anzeigen</button><button class="link-button" data-action="delete-account">Konto endgültig löschen</button>');return;
+  const settings=await call('/me/notifications');
+  openDialog(`<h3>Mein Konto</h3><p>Trainingsmails informieren über Nachrücken, Terminänderungen und Absagen. Standardmäßig ausgeschaltet; Einladungs- und Sicherheitsmails bleiben verfügbar.</p><button class="btn btn-secondary" data-action="toggle-notifications" data-enabled="${!settings.enabled}">Trainingsmails ${settings.enabled?'ausschalten':'einschalten'}</button><p>Eigene Daten abrufen oder Konto löschen.</p><button class="btn btn-secondary" data-action="export-account">Datenexport anzeigen</button><button class="link-button" data-action="delete-account">Konto endgültig löschen</button>`);return;
  }
+ if(action==='toggle-notifications'){await call('/me/notifications','PATCH',{enabled:button.dataset.enabled==='true'});closeDialog();notify('E-Mail-Einstellung gespeichert.');return;}
+ if(action==='manage-locations')return showLocationManagement();
+ if(action==='clear-filters'){state.dateFrom='';state.dateTo='';state.offset=0;state.events=await loadEvents();renderApp();return;}
+ if(action==='previous-events'||action==='next-events'){state.offset=Math.max(0,state.offset+(action==='next-events'?150:-150));state.events=await loadEvents();renderApp();return;}
  if(action==='export-account'){
   const data=await call('/me/export');openDialog(`<h3>Meine Daten</h3><p>Diese JSON-Daten können Sie kopieren und speichern.</p><pre class="data-export">${escapeHtml(JSON.stringify(data,null,2))}</pre>`);return;
  }
@@ -212,7 +239,7 @@ async function performAction(button){
  if(action==='refresh')return loadLive();
  if(action==='new-group'){
    const name=prompt('Name der neuen Sportgruppe:');if(!name?.trim())return;
-   const result=await call('/groups','POST',{name});state.group={id:result.id};return loadLive();
+   const result=await call('/groups','POST',{name,locationId:state.locationFilter||state.group?.locationId||state.locations.find(l=>l.canManage)?.id});state.group={id:result.id};state.offset=0;return loadLive();
  }
  if(action==='join-group'){
    const inviteCode=prompt('Einladungscode oder vollständiger Einladungslink:',incomingInvite);if(!inviteCode)return;
@@ -256,11 +283,17 @@ document.addEventListener('click',async ev=>{
  ev.preventDefault();try{await performAction(button)}catch(err){notify(err.message||'Fehler',true)}
 });
 document.addEventListener('submit',async ev=>{
- const form=ev.target;if(!['auth-form','event-form','email-invite-form'].includes(form.id))return;
+ const form=ev.target;if(!['auth-form','event-form','email-invite-form','training-filter','location-create','location-edit','access-form','group-location'].includes(form.id))return;
  ev.preventDefault();const btn=form.querySelector('[type=submit]');if(btn.disabled)return;btn.disabled=true;
  try{
   if(form.id==='event-form')return await saveEvent(form);
   const data=Object.fromEntries(new FormData(form));
+  if(form.id==='training-filter'){if(data.from&&data.to&&data.from>data.to)throw Error('Das Enddatum muss nach dem Startdatum liegen.');state.dateFrom=data.from;state.dateTo=data.to;state.offset=0;state.events=await loadEvents();renderApp();return;}
+  if(form.id==='location-create')await call('/locations','POST',data);
+  if(form.id==='location-edit')await call('/locations/'+data.locationId,'PATCH',data);
+  if(form.id==='access-form')await call('/admin/access','POST',{...data,enabled:data.enabled==='true'});
+  if(form.id==='group-location')await call('/groups/'+state.group.id,'PATCH',{...data,name:state.group.name,description:state.group.description});
+  if(['location-create','location-edit','access-form','group-location'].includes(form.id)){closeDialog();state.locationFilter='';await loadLive();notify('Verwaltung gespeichert.');return;}
   if(form.id==='email-invite-form'){
     if(state.mode!=='live')throw Error('In der Demo werden keine E-Mails versandt.');
     const result=await call(`/groups/${state.group.id}/email-invites`,'POST',{emails:data.emails,expiresInDays:Number(data.expiresInDays)});state.emailInvitations=result.invitations;renderApp();emailInviteResult(result.results);return;
@@ -280,14 +313,18 @@ document.addEventListener('submit',async ev=>{
 (async()=>{
  if(resetToken){await showAuth('reset');return;}
  if(incomingInvite){await showAuth('register');return;}
- try{const me=await call('/me');if(me.user){state.mode='live';state.user=me.user;state.groups=me.groups;state.group=me.groups[0]||null;state.events=state.group?(await call(`/groups/${state.group.id}/events`)).events:[];renderApp()}}
+ try{const me=await call('/me');if(me.user){state.mode='live';state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.locations=me.locations;state.group=me.groups[0]||null;state.events=await loadEvents();renderApp()}}
  catch{/* Public landing stays available without backend session. */}
 })();
 document.addEventListener('change',async event=>{
+ if(event.target.id==='location-filter'){
+  state.locationFilter=event.target.value;state.offset=0;const group=state.groups.find(g=>!state.locationFilter||g.locationId===state.locationFilter);state.group=group||null;state.emailInvitations=[];state.invite=null;
+  try{state.events=await loadEvents();state.panel='events';renderApp();}catch(error){notify(error.message,true);}return;
+ }
  if(event.target.id!=='group-select')return;
- state.group=state.groups.find(g=>g.id===event.target.value);state.invite=null;
+ state.group=state.groups.find(g=>g.id===event.target.value);state.invite=null;state.offset=0;
  state.emailInvitations=[];
- try{state.events=(await call(`/groups/${state.group.id}/events`)).events;if(state.panel==='settings')await refreshEmailInvites();renderApp();}catch(error){notify(error.message,true);}
+ try{state.events=await loadEvents();if(state.panel==='settings')await refreshEmailInvites();renderApp();}catch(error){notify(error.message,true);}
 });
 window.addEventListener('hashchange',()=>{
  const params=new URLSearchParams(location.hash.slice(1));
@@ -296,9 +333,9 @@ window.addEventListener('hashchange',()=>{
 });
 let refreshing=false;
 async function refreshVisibleEvents(){
- if(refreshing||document.hidden||state.mode!=='live'||state.panel!=='events'||!state.group||modal.open)return;
+ if(refreshing||document.hidden||state.mode!=='live'||state.panel!=='events'||!state.group||modal.open||document.activeElement?.closest('form'))return;
  refreshing=true;
- try{state.events=(await call(`/groups/${state.group.id}/events`)).events;renderApp();}catch{/* Manual refresh displays connection errors. */}finally{refreshing=false;}
+ try{state.events=await loadEvents();renderApp();}catch{/* Manual refresh displays connection errors. */}finally{refreshing=false;}
 }
 setInterval(refreshVisibleEvents,30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshVisibleEvents();});

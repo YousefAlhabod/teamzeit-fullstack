@@ -40,6 +40,7 @@ export function safeEqual(a,b) {
 export function publicUser(user) { return {id:user.id,name:user.name,email:user.email}; }
 export function formatEvent(row, showCounts=false) {
   const result = {id:row.id,groupId:row.group_id,title:row.title,startAt:row.start_at,location:row.location,notes:row.notes,myResponse:row.my_status||null};
+  if(row.capacity!==undefined)Object.assign(result,{capacity:row.capacity,seriesId:row.series_id,myBookingState:row.my_booking_state||null,confirmedCount:Number(row.confirmed_count||0),waitlistCount:Number(row.waitlist_count||0)});
   if(showCounts) result.counts = {yes:Number(row.yes_count||0),no:Number(row.no_count||0),maybe:Number(row.maybe_count||0)};
   return result;
 }

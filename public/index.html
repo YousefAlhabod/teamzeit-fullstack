@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#081713">
-  <meta name="description" content="TeamZeit – Trainingstermine zentral organisieren, Zu- und Absagen erfassen und Teilnehmerlisten verwalten. Scrum-Abschlussprojekt.">
+  <meta name="description" content="TeamZeit – Trainingstermine zentral organisieren, Zu- und Absagen erfassen und Teilnehmerlisten verwalten. Regionale Trainingsgruppen.">
   <title>TeamZeit | Training gemeinsam organisieren</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" type="module"></script>
@@ -13,18 +13,18 @@
  <header class="topbar">
   <div class="container nav-inner">
    <a href="#start" class="brand" aria-label="TeamZeit Startseite"><span class="brand-icon">T<span class="brand-dot">.</span></span><span>TEAMZEIT</span></a>
-   <nav class="navlinks" aria-label="Hauptnavigation"><a href="#funktionen">Funktionen</a><a href="#team">Projektteam</a><a href="#app" id="nav-app-link">App</a></nav>
+   <nav class="navlinks" aria-label="Hauptnavigation"><a href="#funktionen">Funktionen</a><a href="/projekt">Projektinformationen 🔒</a><a href="#app" id="nav-app-link">App</a></nav>
    <button class="btn btn-ghost btn-small" data-action="open-login" id="nav-auth">Anmelden <span aria-hidden="true">↗</span></button>
   </div>
  </header>
  <main>
   <section class="hero container" id="start">
    <div class="hero-copy">
-    <span class="eyebrow"><span class="eyebrow-dot"></span> SCRUM ABSCHLUSSPROJEKT · TEAMZEIT</span>
+    <span class="eyebrow"><span class="eyebrow-dot"></span> TRAINING GEMEINSAM ORGANISIEREN</span>
     <h1>Weniger <span class="accent">Chat-Chaos.</span><br>Mehr Training.</h1>
     <p class="hero-lead">Ein Ort für Trainingstermine, Rückmeldungen und Teilnehmerlisten. Damit Trainer besser planen und Mitglieder einfach dabei sein können.</p>
     <div class="hero-actions"><button class="btn btn-primary" data-action="start-demo">Interaktive Demo testen <span aria-hidden="true">↗</span></button><button class="btn btn-outline" data-action="open-login">Mit Team anmelden</button></div>
-    <div class="hero-metrics"><div><strong>03</strong><span> Kernfunktionen</span></div><div><strong>02</strong><span> Rollen</span></div><div><strong>01</strong><span> gemeinsamer Plan</span></div></div>
+    <div class="hero-metrics"><div><strong>03</strong><span> Kernfunktionen</span></div><div><strong>04</strong><span> Sportrollen</span></div><div><strong>01</strong><span> gemeinsamer Plan</span></div></div>
    </div>
    <div class="hero-visual" aria-hidden="true">
     <div class="visual-glow"></div>
@@ -33,12 +33,12 @@
     <div class="mini-card mini-front"><span class="mini-label">TEILNAHME</span><div class="mini-stat"><span class="status-check">✓</span><div><strong>Du bist dabei!</strong><span>Antwort gespeichert</span></div></div></div>
    </div>
   </section>
-  <section id="funktionen" class="features section-alt"><div class="container"><div class="section-head"><div><span class="eyebrow dark-eyebrow">DER KERN DES PRODUKTS</span><h2>Drei Schritte.<br>Ein klarer Überblick.</h2></div><p>Die drei User Stories aus Sprint 1 bilden gemeinsam den Trainingsablauf – von der Planung bis zur aktuellen Teilnehmerliste.</p></div><div class="feature-grid"><article class="feature-card"><div class="feature-icon">01</div><span class="feature-tag">US01 · TRAINER</span><h3>Termin anlegen</h3><p>Datum, Uhrzeit und Ort eingeben. Das Training erscheint anschließend in der Gruppe.</p><span class="feature-owner">Stefan · Developer</span></article><article class="feature-card"><div class="feature-icon">02</div><span class="feature-tag">US02 · MITGLIED</span><h3>Teilnahme melden</h3><p>Mit einem Klick zu- oder absagen. Optional steht „Vielleicht“ zur Verfügung.</p><span class="feature-owner">Suzana · Developer</span></article><article class="feature-card"><div class="feature-icon">03</div><span class="feature-tag">US03 · TRAINER</span><h3>Teilnehmerliste sehen</h3><p>Aktuelle Zusagen, Absagen und offene Antworten übersichtlich zum jeweiligen Termin.</p><span class="feature-owner">Yousef · Developer</span></article></div></div></section>
+  <section id="funktionen" class="features section-alt"><div class="container"><div class="section-head"><div><span class="eyebrow dark-eyebrow">DER KERN DES PRODUKTS</span><h2>Drei Schritte.<br>Ein klarer Überblick.</h2></div><p>Training planen, Teilnahme melden und verfügbare Plätze im Blick behalten.</p></div><div class="feature-grid"><article class="feature-card"><div class="feature-icon">01</div><span class="feature-tag">TRAINER</span><h3>Termin anlegen</h3><p>Datum, Uhrzeit und Ort eingeben. Das Training erscheint anschließend in der Gruppe.</p></article><article class="feature-card"><div class="feature-icon">02</div><span class="feature-tag">MITGLIED</span><h3>Teilnahme melden</h3><p>Mit einem Klick zu- oder absagen. Optional steht „Vielleicht“ zur Verfügung.</p></article><article class="feature-card"><div class="feature-icon">03</div><span class="feature-tag">TRAINER</span><h3>Teilnehmerliste sehen</h3><p>Aktuelle Zusagen, Absagen und offene Antworten übersichtlich zum jeweiligen Termin.</p></article></div></div></section>
   <section class="project-section container"><div class="project-note"><span class="note-badge">PROJEKTHINTERGRUND</span><h2>Von der Scrum-Idee zur nutzbaren Web-App.</h2><p>Das ursprüngliche TeamZeit-Konzept entstand als Scrum-Lernprojekt für eine Freizeitsportgruppe. Diese Webanwendung ist eine eigenständige technische Weiterentwicklung mit Anmeldung, Terminen, Rückmeldungen und rollenbasiertem Zugriff.</p><p class="muted">Die öffentliche Demo verwendet ausschließlich Beispieldaten. Für den produktiven Einsatz mit echten Mitgliedern sind organisatorische und datenschutzrechtliche Prüfungen nötig.</p></div></section>
   <section class="app-section section-alt" id="app"><div class="container"><div class="section-head app-section-head"><div><span class="eyebrow dark-eyebrow">DIE ANWENDUNG</span><h2>TeamZeit ausprobieren.</h2></div><p>Erst testen, dann gemeinsam nutzen. Die Demo läuft ohne Registrierung im Browser.</p></div><div id="app-root" class="app-shell" aria-live="polite"><div class="app-placeholder"><div class="placeholder-orbit">T.</div><h3>Bereit für das nächste Training?</h3><p>Teste die Demo als Trainer oder Mitglied, oder melde dich in deiner Gruppe an.</p><div class="placeholder-actions"><button class="btn btn-primary" data-action="start-demo">Demo öffnen</button><button class="btn btn-light" data-action="open-login">Anmelden</button></div></div></div></div></section>
-  <section id="team" class="team-section container"><span class="eyebrow dark-eyebrow">SCRUM-TEAM & MITWIRKENDE</span><h2>Ein gemeinsames Projekt.</h2><p class="team-intro">Die ursprünglichen Rollen aus der Kurspräsentation bleiben sichtbar. Die zusätzliche Full-Stack-Realisierung dieser Webversion wird separat ausgewiesen.</p><div class="team-grid"><div class="team-person"><span class="team-initial">VK</span><strong>Vanessa</strong><span>Product Owner</span><small>Produktwert · Priorisierung</small></div><div class="team-person"><span class="team-initial">ÜT</span><strong>Ünal</strong><span>Scrum Master</span><small>Moderation · Scrum-Prozess</small></div><div class="team-person"><span class="team-initial">SB</span><strong>Stefan</strong><span>Developer · US01</span><small>Trainingstermin erstellen</small></div><div class="team-person"><span class="team-initial">SL</span><strong>Suzana</strong><span>Developer · US02</span><small>Teilnahme melden</small></div><div class="team-person team-highlight"><span class="team-initial">YA</span><strong>Yousef Alhabod</strong><span>Developer · US03</span><small>Teilnehmerliste</small></div></div><p><strong>Yousef Alhabod – Full-Stack Developer der eigenständigen TeamZeit-Portfolio-Version.</strong></p><p class="stakeholder">Stakeholder des Kursprojekts: André · Verein „Die wilden Waden“ (Rolle laut Präsentation).</p></section>
+
  </main>
- <footer><div class="container footer-inner"><span class="brand"><span class="brand-icon">T<span class="brand-dot">.</span></span><span>TEAMZEIT</span></span><span>Scrum-Lernprojekt · Technische Erweiterung 2026</span><a href="/datenschutz.html">Datenschutz</a><a href="/impressum.html">Impressum</a></div></footer>
+ <footer><div class="container footer-inner"><span class="brand"><span class="brand-icon">T<span class="brand-dot">.</span></span><span>TEAMZEIT</span></span><span>Trainingsmanagement · 2026</span><a href="/datenschutz.html">Datenschutz</a><a href="/impressum.html">Impressum</a></div></footer>
  <div id="toast" class="toast" role="status" aria-live="polite"></div>
  <dialog id="modal" aria-labelledby="modal-title"><div class="modal-inner"><button class="modal-close" data-action="close-modal" aria-label="Schließen">×</button><div id="modal-content"></div></div></dialog>
 </body>

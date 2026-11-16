@@ -13,7 +13,7 @@ test('recipient parsing validates the entire batch and removes duplicates',()=>{
 
 test('personal email invitations: real Worker/D1 and intercepted Resend batch',async t=>{
  const batches=[];let fail=false;
- const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/email-invites.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789',RESEND_API_KEY:'mock-only-no-real-mail',MAIL_FROM:'TeamZeit <mail@example.invalid>',APP_ORIGIN:'https://teamzeit.example.invalid'},outboundService:async request=>{
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/email-invites.js'},{type:'ESModule',path:'src/platform.js'},{type:'ESModule',path:'src/project-page.js'},{type:'ESModule',path:'public/time.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789',RESEND_API_KEY:'mock-only-no-real-mail',MAIL_FROM:'TeamZeit <mail@example.invalid>',APP_ORIGIN:'https://teamzeit.example.invalid'},outboundService:async request=>{
   assert.equal(request.url,'https://api.resend.com/emails/batch');
   const payload=await request.json();assert.match(request.headers.get('Idempotency-Key'),/^teamzeit-invites-/);batches.push(payload);
   return fail?Response.json({message:'Provider unavailable'},{status:429}):Response.json({data:payload.map(()=>({id:crypto.randomUUID()}))});
