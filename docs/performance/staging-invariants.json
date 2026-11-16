@@ -1,0 +1,11 @@
+{
+  "users": 1000,
+  "overbookedEvents": 0,
+  "hotConfirmed": 50,
+  "hotWaitlisted": 950,
+  "remainingNormalBookings": 0,
+  "unauthorizedBookings": 0,
+  "queuedEmails": 0,
+  "rawFile": "test-results/staging-invariants.json",
+  "rawSha256": "7e093c97314ca2dc8fb28f691787d66454085e8f1808d565b26e1af3602bf0d8"
+}

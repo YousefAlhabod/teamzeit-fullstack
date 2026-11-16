@@ -1,0 +1,27 @@
+{
+  "runtime": "local workerd",
+  "parameters": {
+    "N": 16384,
+    "r": 8,
+    "p": 5
+  },
+  "result": [
+    {
+      "concurrent": 1,
+      "totalMs": 346,
+      "pingDelayMs": 321
+    },
+    {
+      "concurrent": 4,
+      "totalMs": 1190,
+      "pingDelayMs": 1158
+    },
+    {
+      "concurrent": 16,
+      "totalMs": 4555,
+      "pingDelayMs": 4533
+    }
+  ],
+  "rawFile": "test-results/hash-diagnosis.json",
+  "rawSha256": "ff7a928cca60a7043a58ca23265943b24c74f301e9085af0903f7807294b208d"
+}

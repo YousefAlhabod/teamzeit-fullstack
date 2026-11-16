@@ -1,4 +1,5 @@
-import {randomBytes,randomUUID,scryptSync} from 'node:crypto';import {writeFileSync} from 'node:fs';
+import {randomBytes,randomUUID,scryptSync} from 'node:crypto';import {writeFileSync,mkdirSync,existsSync} from 'node:fs';
+mkdirSync('.private',{recursive:true});if(existsSync('.private/perf-staging.json'))throw Error('Existing private staging fixture: reuse it instead of overwriting credentials.');
 const password=randomBytes(24).toString('base64url'),salt=randomBytes(16).toString('hex'),hash='scrypt-v1$'+scryptSync(password,Buffer.from(salt,'hex'),32,{N:16384,r:8,p:5,maxmem:64*1024*1024}).toString('hex'),key=randomBytes(32).toString('hex'),users=[],groups=[],sql=[],q=s=>"'"+String(s).replaceAll("'","''")+"'";
 const locations=['Hannover','Berlin','Hamburg'].map(city=>{const id=randomUUID();sql.push(`INSERT INTO locations(id,name,city) VALUES(${[id,city,city].map(q)});`);return id;});
 for(let i=0;i<1000;i++){const u={id:randomUUID(),email:`perf-${i}@example.invalid`,ip:`198.18.${Math.floor(i/250)}.${i%250+1}`};users.push(u);sql.push(`INSERT INTO users(id,name,email,password_hash,password_salt) VALUES(${[u.id,'Performance Test',u.email,hash,salt].map(q)});`);}

@@ -10,6 +10,14 @@ Die geprüften Kernfunktionen und die erste regionale Ausbaustufe sind veröffen
 
 ## Regionale Ausbaustufe
 
+## Nachfolgende gezielte Performance-Optimierung
+
+Nur Authentifizierungs-/Berechtigungsabfragen und Buchungsrückgabe optimiert; kein Redesign, keine neuen Produktfunktionen, keine Datenmigration. 32 Regressionstests erfolgreich. Echter privater Cloudflare-Staging-Vergleich mit je 1.000 aktiven API-Nutzern für 120 Sekunden: p95 Abfrage 171→119 ms, Buchung 244→138 ms, Absage 261→143 ms, API-Fehler insgesamt 2,971→0 %. Zusätzlich harte gleichzeitige Buchungsspitze: p95 5.443→3.842 ms. 50 bestätigte Plätze, 950 Wartende, keine Überbuchung oder unberechtigte Buchung und keine Test-E-Mails.
+
+Gesamtziel weiterhin nicht erreicht: 39,4 % HTTP-503-Ressourcenlimitfehler bei den separaten 1.000 echten Anmeldeversuchen. Höheres CPU-Limit wurde für den Free-Plan vom Anbieter abgewiesen; kein Tarifwechsel, keine Abschwächung der Passwortprüfung. Vollständige Methodik und Nachweise: [Performance-Optimierung](PERFORMANCE_OPTIMIZATION.md).
+
+## Nachweise der regionalen Ausbaustufe
+
 - Additive Datenstruktur für Standorte, Standortverantwortliche, Plattformadministratoren und Trainingsserien. Bestehende Gruppen zunächst beim Platzhalterstandort. Das bereits vorhandene persönliche Betreiberkonto ist Plattformadministrator; keine neuen produktiven Benutzerkonten erzeugt.
 - Mehrere Trainer je Gruppe, bis zu 26 wöchentliche Termine mit stabiler Berliner Ortszeit, einzelne Termine bearbeiten/absagen, Kapazitätslimit und atomare Warteliste mit Nachrücken. Standort- und Datumsfilter sowie begrenzte Terminseiten. Neue regionale Gruppen werden von der zuständigen Verwaltung angelegt.
 - Geschützte Projektseite `/projekt`, einschließlich Scrum-Rollen und Backlog-Anforderung; Mitgliedschaft allein gibt keinen Projektzugriff. Projekt-Reviewer erhalten keine operativen Sportrechte. Keine zusätzliche Scrum-Verwaltungsanwendung implementiert.

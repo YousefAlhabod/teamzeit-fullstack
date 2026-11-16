@@ -1,4 +1,5 @@
-import {readFileSync,writeFileSync} from 'node:fs';import {performance,monitorEventLoopDelay} from 'node:perf_hooks';import {Pool,fetch as httpFetch} from 'undici';import {execFileSync} from 'node:child_process';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';import {performance,monitorEventLoopDelay} from 'node:perf_hooks';import {Pool,fetch as httpFetch} from 'undici';import {execFileSync} from 'node:child_process';
+mkdirSync('test-results',{recursive:true});
 const args=Object.fromEntries(process.argv.slice(2).map(x=>x.replace(/^--/,'').split('='))),f=JSON.parse(readFileSync('.private/perf-staging.json'));
 if(f.url!=='https://teamzeit-perf-staging.devyousefalhabod.workers.dev'||f.databaseId!=='eba63996-3ef2-47b1-bca1-c2bdb01d57de'||!f.key)throw Error('Only the isolated staging target is allowed.');
 const n=Number(args.users||1000),duration=Number(args.duration||120),ramp=Number(args.ramp||60);if(!Number.isInteger(n)||n<1||n>1000||duration<10||duration>180||ramp<1)throw Error('Invalid test size.');

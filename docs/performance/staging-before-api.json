@@ -1,0 +1,88 @@
+{
+  "at": "2026-11-16T18:13:26.801Z",
+  "label": "baseline-api",
+  "target": "isolated Cloudflare Worker + EU D1",
+  "databaseId": "eba63996-3ef2-47b1-bca1-c2bdb01d57de",
+  "commit": "1ed53adcef03f07bd92c111b7c509fcc9f495f5a",
+  "users": 1000,
+  "authMode": "seeded",
+  "actualLogins": 0,
+  "preparedSessions": 1000,
+  "writtenRows": 11500,
+  "readRows": 233943,
+  "budgetStopped": false,
+  "peakActiveUsers": 1000,
+  "activeSeconds": 120.01671250000001,
+  "loginSeconds": 0.0000019999999999527062,
+  "maxInFlight": 1000,
+  "connections": 256,
+  "clientEventLoopP95Ms": 32,
+  "runtime": "v26.13.1",
+  "overall": {
+    "count": 7000,
+    "p50": 135,
+    "p95": 4625,
+    "p99": 5437,
+    "max": 5484,
+    "errors": 208,
+    "errorPercent": 2.971,
+    "queries": 3.4
+  },
+  "operations": {
+    "events": {
+      "count": 4000,
+      "p50": 107,
+      "p95": 171,
+      "p99": 254,
+      "max": 363,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 3
+    },
+    "book": {
+      "count": 1000,
+      "p50": 193,
+      "p95": 244,
+      "p99": 284,
+      "max": 521,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 4
+    },
+    "cancel": {
+      "count": 1000,
+      "p50": 192,
+      "p95": 261,
+      "p99": 345,
+      "max": 538,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 4
+    },
+    "security": {
+      "count": 1000,
+      "p50": 2115,
+      "p95": 3439,
+      "p99": 3452,
+      "max": 3458,
+      "errors": 0,
+      "errorPercent": 0,
+      "queries": 2
+    },
+    "contention": {
+      "count": 1000,
+      "p50": 3278,
+      "p95": 5443,
+      "p99": 5460,
+      "max": 5484,
+      "errors": 208,
+      "errorPercent": 20.8,
+      "queries": 3.83
+    }
+  },
+  "productionTargeted": false,
+  "mailConfigured": false,
+  "totalSeconds": 129.7545613,
+  "rawFile": "test-results/staging-baseline-api-1794852806905.json",
+  "rawSha256": "df40d8546d10a76fdc683903c61634d4fcebe85bc80ce138774a925ef5a5dac9"
+}
