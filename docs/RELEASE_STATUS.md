@@ -26,11 +26,11 @@
 
 ## Noch offen – keine vollständige Freigabe
 
-- GitHub CLI ist noch nicht authentifiziert. Eigenständiges Git-Repository lokal vorbereitet; Remote-Erstellung und Push stehen aus.
-- Die Portfolio-Karte ist per Cloudflare veröffentlicht. Der entsprechende Commit d8559ce liegt auf dem lokalen Zweig feature/teamzeit-project-link; GitHub-Synchronisierung fehlt noch. Eine spätere Veröffentlichung aus dem alten GitHub-Stand könnte den Link entfernen.
-- Resend-Account und API-Secret sind noch nicht verfügbar. Senderdomain, DNS, echte Nachrichtenzustellung und vollständiger Reset über zugestellte E-Mail sind deshalb offen.
+- GitHub-Repository veröffentlicht: https://github.com/YousefAlhabod/teamzeit-fullstack . Der erste automatisierte GitHub-Prüflauf ist erfolgreich (Run 43881054339).
+- Portfolio-Verlinkung ist mit GitHub synchronisiert: Pull Request 3 nach bestandener Cloudflare-Prüfung zusammengeführt, Merge 9620e8b8cf87bc1c456cf480d9e78610c2c7f588.
+- RESEND_API_KEY ist als Produktions-Secret vorhanden und vom Anbieter als Sending Access erkannt. Der für Domain-Verwaltung erforderliche temporäre RESEND_SETUP_KEY fehlt in den über die API sichtbaren Versionen. Senderdomain, DNS, echte Nachrichtenzustellung und vollständiger Reset über zugestellte E-Mail sind deshalb noch offen.
 - Temporärer Deployment-Operator-Endpunkt /api/admin/mail-config ist durch den zufälligen SETUP_TOKEN geschützt. Nach erfolgreicher Einrichtung entfernen und erneut veröffentlichen.
-- Synthetische Produktions-Testkonten und Testgruppe nach abschließenden Prüfungen bereinigen. Der initiale Trainer ist derzeit ein synthetisches Betriebskonto; persönliches Trainerkonto über private Einmal-Einladung einrichten und anschließend das Testkonto entfernen.
+- Die konkrete E2E-Testgruppe und vier synthetische Mitgliedskonten wurden entfernt. Der initiale Trainer bleibt vorläufig erhalten, damit der einzige Verwaltungszugang nicht verloren geht. Eine private einmalige Trainer-Einladung ist vorbereitet. Die Produktionsprüfung zählt bisher nur dieses eine synthetische Konto und noch keinen persönlichen Trainer. Erst nach verifiziertem persönlichem Konto das technische Trainerkonto entfernen.
 - Provider-Vertragsunterlagen, tatsächliche Versandkonfiguration und Datenschutzhinweise vor abschließender Freigabe abgleichen. Keine pauschale rechtliche Konformitätsgarantie.
 
 ## Lokale Nachweise
