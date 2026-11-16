@@ -138,22 +138,6 @@ async function api(request,env) {
     await rateLimit(env,`auth:${request.headers.get('cf-connecting-ip')||'local'}:${path}`,30);
   }
   if(method==='GET'&&path==='/api/health') return json({status:'ok',app:'TeamZeit',version:'1.0.0'});
-  // Temporary deployment operator route. Removed once mail setup is verified.
-  if(method==='POST'&&path==='/api/admin/mail-config') {
-    const data=await params(request);
-    if(!env.SETUP_TOKEN||!safeEqual(await hashToken(String(data.setupToken||'')),await hashToken(env.SETUP_TOKEN)))throw new HttpError(403,'Keine Berechtigung.');
-    const resendKey=data.action==='test'?env.RESEND_API_KEY:(env.RESEND_SETUP_KEY||env.RESEND_API_KEY);
-    if(!resendKey)throw new HttpError(503,'Resend-Schlüssel fehlt.');
-    const routes={list:['/domains','GET'],create:['/domains','POST'],verify:[`/domains/${data.domainId}/verify`,'POST'],get:[`/domains/${data.domainId}`,'GET'],test:['/emails','POST'],delivery:[`/emails/${data.emailId}`,'GET']};
-    const entry=routes[data.action];if(!entry)throw new HttpError(400,'Ungültige Aktion.');
-    if(['verify','get'].includes(data.action)&&!/^[a-f0-9-]{36}$/i.test(data.domainId||''))throw new HttpError(400,'Ungültige Domain-ID.');
-    if(data.action==='delivery'&&!/^[a-f0-9-]{36}$/i.test(data.emailId||''))throw new HttpError(400,'Ungültige E-Mail-ID.');
-    let payload;
-    if(data.action==='create')payload={name:'mail.teamzeit.yousef-alhabod.de',region:'eu-west-1'};
-    if(data.action==='test')payload={from:env.MAIL_FROM,to:['devyousefalhabod@gmail.com'],subject:'TeamZeit: Versandtest',text:'TeamZeit wurde auf https://teamzeit.yousef-alhabod.de veröffentlicht. Dies ist der angeforderte einmalige Versandtest. Keine Antwort erforderlich.'};
-    const res=await fetch('https://api.resend.com'+entry[0],{method:entry[1],headers:{Authorization:`Bearer ${resendKey}`,'Content-Type':'application/json'},body:payload?JSON.stringify(payload):undefined});
-    return json({providerStatus:res.status,result:await res.json()},res.ok?200:502);
-  }
   if(method==='GET'&&path==='/api/setup/status') {
     const result=await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first();
     return json({initialized:result.n>0,registrationEnabled:env.REGISTRATION_ENABLED==='true'||['localhost','127.0.0.1'].includes(u.hostname),recoveryEnabled:!!(env.RESEND_API_KEY&&env.MAIL_FROM&&env.APP_ORIGIN)});

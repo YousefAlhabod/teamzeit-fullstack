@@ -48,7 +48,7 @@ function startDemo(){
   state.events=loadDemo();state.demoRole='trainer';state.panel='events';renderApp();scrollApp();
 }
 function scrollApp(){document.getElementById('app').scrollIntoView({behavior:'smooth',block:'start'})}
-function openDialog(html){modalContent.innerHTML=html;const title=modalContent.querySelector('h3');if(title)title.id='modal-title';modal.showModal()}
+function openDialog(html){modalContent.innerHTML=html;const title=modalContent.querySelector('h3');if(title)title.id='modal-title';if(!modal.open)modal.showModal()}
 function closeDialog(){if(modal.open)modal.close()}
 function errorIn(node,message){const alert=node.querySelector('[data-form-error]');if(alert){alert.textContent=message;alert.hidden=false}else notify(message,true)}
 async function showAuth(mode='login'){
@@ -146,7 +146,7 @@ async function showParticipants(id){
  if(state.mode==='demo'){const ev=state.events.find(e=>e.id===id);people=ev?.people||[]}
  else people=(await call(`/events/${id}/participants`)).participants;
  const title=state.events.find(e=>e.id===id)?.title||'Training';
- openDialog(`<h3>Teilnehmerliste</h3><p>US03 · ${escapeHtml(title)} · Nur für Trainer</p><table class="participant-table"><thead><tr><th>Mitglied</th><th>Rückmeldung</th></tr></thead><tbody>${people.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td><span class="status-pill ${escapeHtml(p.status)}">${escapeHtml(statusName[p.status]||'Noch offen')}</span></td></tr>`).join('')}</tbody></table><p>${people.length} Gruppenmitglieder</p>`);
+ openDialog(`<h3>Teilnehmerliste</h3><p>${escapeHtml(title)} · Nur für Trainer</p><table class="participant-table"><thead><tr><th>Mitglied</th><th>Rückmeldung</th></tr></thead><tbody>${people.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td><span class="status-pill ${escapeHtml(p.status)}">${escapeHtml(statusName[p.status]||'Noch offen')}</span></td></tr>`).join('')}</tbody></table><p>${people.length} Gruppenmitglieder · Stand: ${escapeHtml(new Date().toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin'}))}</p><button class="btn btn-secondary" data-action="participants" data-id="${escapeHtml(id)}">Liste aktualisieren</button>`);
 }
 async function deleteEvent(id){
  if(!isTrainer())return;

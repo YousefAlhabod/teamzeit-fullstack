@@ -1,0 +1,10 @@
+import {resolveTxt,resolveCname} from 'node:dns/promises';
+import assert from 'node:assert/strict';
+import {writeFileSync} from 'node:fs';
+const suffix='mail.teamzeit.yousef-alhabod.de';
+const txt=await resolveTxt('resend._domainkey.'+suffix);
+assert.ok(txt.some(parts=>parts.join('').startsWith('p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCbtRx/HPmZeaQat0DHI9WRvmL6')));
+const first=await resolveCname('rsend.'+suffix);assert.ok(first.some(x=>x.replace(/\.$/,'')==='rsend-euw1.forge.rmta.net'));
+const second=await resolveCname('send.'+suffix);assert.ok(second.some(x=>x.replace(/\.$/,'')==='send.forge.rmta.net'));
+const result={at:new Date().toISOString(),domain:suffix,dkim:true,rsend:true,send:true};
+writeFileSync('test-results/mail-dns.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));

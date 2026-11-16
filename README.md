@@ -42,9 +42,9 @@ Die vorhandene lokale Datenbank und das Backup des ursprünglichen Projekts blei
 
 `wrangler.jsonc` bindet ausschließlich den eigenständigen Worker und die TeamZeit-Produktionsdatenbank. `npm run db:remote` wendet Migrationen an, `npm run deploy` veröffentlicht. Beide Schritte benötigen ein autorisiertes Cloudflare-Konto. Die Hauptdomain wird von einem separaten Pages-Projekt ausgeliefert.
 
-Secrets ausschließlich über Cloudflare/Wrangler setzen: `SETUP_TOKEN`, `RATE_LIMIT_SECRET`, `RESEND_API_KEY`. `APP_ORIGIN`, `MAIL_FROM` und die Registrierungsschaltung sind normale Variablen. Keine Secrets, .dev.vars, Testzugänge oder lokale Sicherungen veröffentlichen. Die Verzeichnisse `.private`, `tooling` und `test-results` sind ausgeschlossen.
+Im eingerichteten Produktivbetrieb verbleiben `RATE_LIMIT_SECRET` und `RESEND_API_KEY` als Cloudflare-Secrets. `SETUP_TOKEN` wird nur für die einmalige Ersteinrichtung benötigt und wurde anschließend aus der Produktion entfernt. `APP_ORIGIN`, `MAIL_FROM` und die Registrierungsschaltung sind normale Variablen. Keine Secrets, .dev.vars, Testzugänge oder lokale Sicherungen veröffentlichen. Die Verzeichnisse `.private`, `tooling` und `test-results` sind ausgeschlossen.
 
-Passwort-Wiederherstellung erfordert einen eingerichteten Resend-Account, verifizierte Senderdomain und den Versand-Secret. Fehlt die Konfiguration, meldet die App die fehlende Verfügbarkeit. Ein Reset-Link gilt 30 Minuten, nur einmal, und beendet vorhandene Sitzungen. Ein erzeugter Providerauftrag allein beweist noch keine Zustellung; vor Abschluss ist die tatsächliche Zustellung zu prüfen.
+Die Passwort-Wiederherstellung verwendet die verifizierte Resend-Senderdomain `mail.teamzeit.yousef-alhabod.de` (Irland) und einen Sending-Access-Schlüssel. Echte Test- und Rücksetzmails wurden als Delivered bestätigt; der persönliche Reset samt neuer Anmeldung wurde abgeschlossen. Ein Link gilt 30 Minuten, nur einmal, und beendet vorhandene Sitzungen. Fehlt die Konfiguration in einer anderen Installation, meldet die App die fehlende Verfügbarkeit.
 
 ## Validierung
 

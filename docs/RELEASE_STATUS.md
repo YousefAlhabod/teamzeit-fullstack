@@ -1,38 +1,37 @@
-# TeamZeit – Releaseprüfung, 16. November 2026
+# TeamZeit – technischer Freigabestand, 16. November 2026
 
-## Veröffentlicht
+Die geprüften Kernfunktionen sind für die Kurs- und Portfolio-Nutzung veröffentlicht.
 
-- Anwendung: https://teamzeit.yousef-alhabod.de
-- Portfolio-Eintrag: https://yousef-alhabod.de/#teamzeit
-- Worker: teamzeit-app, getrennt vom bestehenden Pages-Projekt des Portfolios.
-- Produktions-D1: teamzeit-production, EU-Jurisdiktion. Drei Migrationen angewendet.
-- Eigene Datenschutz- und Impressumseiten, Teamrollen mit Vornamen und separat ausgewiesener Full-Stack-Beitrag.
-- Registrierung ausschließlich über gültige Einladung. Noch keine bestätigte E-Mail-Zustellung.
+- App und öffentliche Demo: https://teamzeit.yousef-alhabod.de
+- Quellcode: https://github.com/YousefAlhabod/teamzeit-fullstack
+- Portfolio: https://yousef-alhabod.de/#teamzeit
+- Produktionsversion: 8636031c-7320-4704-a72a-8e030f88fe09
+- Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; drei Migrationen angewendet.
 
-## Nachgewiesen
+## Nachgewiesene Prüfungen
 
-- 15 automatisierte Tests einschließlich echter lokaler Worker/D1-Integration.
-- Vier getrennte Konten und unabhängige HTTP-Sitzungen auf der Produktionsdomain: Trainer, drei Mitglieder; zusätzliche Browserregistrierung mit ausschließlich fiktiven Angaben.
-- Zusage/Absage/Vielleicht, Änderung der Antwort und korrekte Trainerliste. Gespeicherter Zustand über neue Sitzung abrufbar.
-- Erstellung, Änderung und Löschung von Terminen; Zugriffstrennung nach Rolle und Gruppe; CSRF-Origin-Abwehr und Abmeldung.
-- Kontoexport, lokale Kontolöschung mit Referenzübertragung, Schutz der letzten Trainerrolle, einmalige Trainerinvitation unter konkurrierenden Registrierungen.
-- Browser auf der öffentlichen Domain: Registrierung mit Einladungslink, Teilnahme nach Neuladen, Trainerliste, Termin anlegen/bearbeiten, Demo ohne Konto.
-- Responsive Darstellung bei tatsächlichen Browserbreiten 390 und 1280 Pixeln. Mobile Überbreite korrigiert. Kein Test auf physischem iPhone/Android-Gerät.
-- HTTP leitet auf HTTPS um. API und statische Seiten liefern Sicherheitsheader.
-- Passwortreset mit simuliertem Versand: identische öffentliche Antwort für bekannte/unbekannte Adresse, gehashter Token, Ablauf, Einmalverwendung, neue Anmeldung und ungültige alte Sitzungen.
-- Produktionsfehler beim bisherigen PBKDF2 (>100.000 Iterationen) nachgewiesen und durch scrypt für neue Konten behoben. Echtes Produktionskonto anschließend erfolgreich erstellt und angemeldet.
-- npm audit: keine bekannten Schwachstellen im geprüften Abhängigkeitsstand.
-- Portfolio: sieben bestehende Testgruppen erfolgreich; Original-CSS, JavaScript und Profilbild per Hashvergleich unverändert; bestehende Seiten und Gästebuch-API nach Veröffentlichung erreichbar.
+- 15 automatisierte Tests: Validierung, echte lokale Worker/D1-Integration, Rollen, Gruppenisolation, Einladungen, Termine, Antworten, neue Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung, Schutz der letzten Trainerrolle und konkurrierende Einmal-Einladungen.
+- Vier getrennte Konten auf der Produktionsdomain: Trainer und drei Mitglieder. Zusage, Absage, Vielleicht, Antwortänderung, Teilnehmerliste, Terminerstellung/-änderung/-löschung, Datenexport und Anmeldung aus unabhängigen HTTP-Sitzungen erfolgreich.
+- Öffentlicher Browser-Test: zusätzliche Registrierung über Einladungslink, gespeicherte Antwort nach Neuladen, Trainerliste, Termin anlegen/bearbeiten und Demo. Der zusätzliche Listen-Aktualisieren-Knopf wurde nach Veröffentlichung im offenen Dialog geprüft.
+- Darstellung bei tatsächlichen Browserbreiten 390 und 1280 Pixeln geprüft; mobile Überbreite korrigiert.
+- SMTP-Versand: Resend-Domain mail.teamzeit.yousef-alhabod.de in Irland verifiziert. DKIM und beide CNAME-Einträge öffentlich auflösbar. Bestehende DNS-Einträge der Hauptwebsite unverändert.
+- Echte Testmail und echte Passwortreset-Mail an das persönliche Trainerkonto laut Resend jeweils Delivered. Testmail-ID: 01a1e4c6-f5cf-7116-a175-04cf6d957c65. Reset-Mail-ID: 01a1e4c7-fb98-7a32-a7a6-6229f3b39c73.
+- Persönlicher Passwortreset durch den Eigentümer abgeschlossen: zuvor ein gültiger Rücksetztoken, danach null Tokens und eine aktive neue Sitzung; Trainerrolle in der App und Datenbank bestätigt. Das persönliche Passwort wurde weder gelesen noch protokolliert.
+- Sämtliche fünf synthetischen Produktionskonten und die konkrete E2E-Testgruppe entfernt. Das persönliche Trainerkonto und die Gruppe Die wilden Waden bleiben erhalten; ursprüngliche Gruppenreferenzen wurden übertragen. Alte Test-Sitzung ungültig.
+- Temporärer Operator-Endpunkt entfernt. RESEND_SETUP_KEY und das verbrauchte SETUP_TOKEN aus der Produktion gelöscht. Nur RATE_LIMIT_SECRET und RESEND_API_KEY bleiben als Secrets bestehen.
+- Bestehender Resend-Schlüssel mit Sending Access auf ausdrücklichen Wunsch beibehalten. Es wurde kein neuer Schlüssel erstellt oder der aktive Schlüssel widerrufen. Das entfernte Setup-Secret enthielt denselben Wert und war kein eigenständiger Full-Access-Schlüssel.
+- Öffentliche Schlussprüfung: HTTPS, HTTP-Weiterleitung, Sicherheitsheader, geschützte Kontodaten, aktive Registrierung per Einladung, konfigurierte Wiederherstellung, Rechtsseiten und Assets erfolgreich.
+- npm audit: keine bekannten Schwachstellen im geprüften Stand. GitHub-Prüfläufe erfolgreich; Schlussstand wird über denselben Workflow geprüft.
+- Portfolio: sieben bestehende Testgruppen erfolgreich. Original-CSS, JavaScript und Profilbild per Hashvergleich unverändert; Seiten und Gästebuch-API nach Veröffentlichung erreichbar. Portfolio-Link per Pull Request 3 mit main synchronisiert.
 
-## Noch offen – keine vollständige Freigabe
+## Nutzung
 
-- GitHub-Repository veröffentlicht: https://github.com/YousefAlhabod/teamzeit-fullstack . Der erste automatisierte GitHub-Prüflauf ist erfolgreich (Run 43881054339).
-- Portfolio-Verlinkung ist mit GitHub synchronisiert: Pull Request 3 nach bestandener Cloudflare-Prüfung zusammengeführt, Merge 9620e8b8cf87bc1c456cf480d9e78610c2c7f588.
-- RESEND_API_KEY ist als Produktions-Secret vorhanden und vom Anbieter als Sending Access erkannt. Der für Domain-Verwaltung erforderliche temporäre RESEND_SETUP_KEY fehlt in den über die API sichtbaren Versionen. Senderdomain, DNS, echte Nachrichtenzustellung und vollständiger Reset über zugestellte E-Mail sind deshalb noch offen.
-- Temporärer Deployment-Operator-Endpunkt /api/admin/mail-config ist durch den zufälligen SETUP_TOKEN geschützt. Nach erfolgreicher Einrichtung entfernen und erneut veröffentlichen.
-- Die konkrete E2E-Testgruppe und vier synthetische Mitgliedskonten wurden entfernt. Der initiale Trainer bleibt vorläufig erhalten, damit der einzige Verwaltungszugang nicht verloren geht. Eine private einmalige Trainer-Einladung ist vorbereitet. Die Produktionsprüfung zählt bisher nur dieses eine synthetische Konto und noch keinen persönlichen Trainer. Erst nach verifiziertem persönlichem Konto das technische Trainerkonto entfernen.
-- Provider-Vertragsunterlagen, tatsächliche Versandkonfiguration und Datenschutzhinweise vor abschließender Freigabe abgleichen. Keine pauschale rechtliche Konformitätsgarantie.
+Besucher können sofort die interaktive Demo öffnen. Der Eigentümer meldet sich mit dem persönlichen Konto und dem selbst gesetzten Passwort an. Unter Gruppe & Einladen erzeugt er einen sieben Tage gültigen Mitgliedslink für bis zu 25 Beitritte. Mitglieder registrieren sich damit ohne Einrichtungscode. Trainer können Mitglieder verwalten und weitere Trainer bestimmen.
 
-## Lokale Nachweise
+## Grenzen
 
-Private Testzugänge und Operator-Secret liegen ausschließlich im ignorierten Verzeichnis .private. Produktionsprüfbericht und Browserbilder befinden sich in test-results (ebenfalls ignoriert). Das ursprüngliche Projekt wurde vor den Änderungen außerhalb dieses Repositories gesichert; die ursprünglichen lokalen .wrangler-Daten wurden nicht gelöscht.
+Kein Test auf einem physischen iPhone oder Android-Gerät; geprüft wurde die responsive Browserdarstellung. Fotos, Push-Nachrichten, Leistungsstatistiken und automatische Erinnerungen gehören nicht zu dieser Ausbaustufe. Die technischen Prüfungen sind keine pauschale rechtliche Konformitätsgarantie; insbesondere bei später geänderten Verarbeitungszwecken sind die Datenschutzhinweise anzupassen.
+
+## Nachweise und Sicherung
+
+Lokale Prüfberichte und Browserbilder liegen in test-results, private Einrichtungsdateien in .private; beide Verzeichnisse sind von Git ausgeschlossen. Einrichtungsskripte dokumentieren den abgeschlossenen Aufbau und benötigen teilweise inzwischen ungültige private Testzugänge. Sie sind kein Bestandteil des normalen Betriebs. Das Originalprojekt wurde vor Änderungen außerhalb des Repositories gesichert; ursprüngliche lokale .wrangler-Daten wurden nicht gelöscht.

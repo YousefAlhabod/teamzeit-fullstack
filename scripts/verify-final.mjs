@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {writeFileSync} from 'node:fs';
+const origin='https://teamzeit.yousef-alhabod.de',checks=[];
+const response=await fetch(origin+'/api/health');assert.equal(response.status,200);assert.equal((await response.json()).status,'ok');checks.push('Public HTTPS API');
+const status=await(await fetch(origin+'/api/setup/status')).json();assert.deepEqual(status,{initialized:true,registrationEnabled:true,recoveryEnabled:true});checks.push('Initialized, invitations enabled, recovery configured');
+assert.equal((await fetch(origin+'/api/me')).status,401);checks.push('Anonymous account access rejected');
+const operator=await fetch(origin+'/api/admin/mail-config',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(operator.status,401);checks.push('Temporary mail operator route removed');
+const page=await fetch(origin);assert.equal(page.status,200);assert.match(page.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.equal(page.headers.get('strict-transport-security'),'max-age=31536000');checks.push('Static page security headers');
+const client=await(await fetch(origin+'/app.js')).text();assert.ok(client.includes('Liste aktualisieren'));checks.push('Participant refresh control deployed');
+for(const path of ['/datenschutz.html','/impressum.html','/style.css','/time.js'])assert.equal((await fetch(origin+path)).status,200);checks.push('Legal pages and assets available');
+assert.equal((await fetch(origin.replace('https:','http:'),{redirect:'manual'})).status,308);checks.push('HTTP redirected to HTTPS');
+const result={at:new Date().toISOString(),origin,status:'passed',checks};writeFileSync('test-results/final.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
