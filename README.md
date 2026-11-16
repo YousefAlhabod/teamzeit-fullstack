@@ -48,7 +48,13 @@ Die Passwort-Wiederherstellung verwendet die verifizierte Resend-Senderdomain `m
 
 ## Validierung
 
-`npm run check` prüft Syntax und führt 15 Tests aus, darunter ein integrierter Worker/D1-Ablauf mit vier Konten, Rollen, getrennten Gruppen, Einladungen, Terminen, veränderten Antworten, neuen Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung und Schutz der letzten Trainerrolle.
+`npm run check` prüft Syntax und führt 23 Tests aus, darunter integrierte Worker/D1-Abläufe mit vier Konten, Rollen, getrennten Gruppen, persönlichen E-Mail-Einladungen, Terminen, veränderten Antworten, neuen Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung und Schutz der letzten Trainerrolle.
+
+### Persönliche E-Mail-Einladungen
+
+Trainer können unter „Gruppe & Einladen“ bis zu 20 Adressen gleichzeitig eingeben. Resend erhält für jede Adresse eine eigene Nachricht mit einem zufälligen, einmaligen und an die Empfängeradresse gebundenen Link. Nach Registrierung oder ausdrücklicher Annahme mit einem bestehenden Konto wird die Person Mitglied der ausgewählten Gruppe. Die Übersicht zeigt ausstehende, angenommene und abgelaufene Einladungen sowie Versandfehler. Der Versandstatus bestätigt die Annahme durch Resend, keine Inbox-Zustellung.
+
+Gültigkeit: 1, 3 oder 7 Tage. Erneutes Senden ersetzt den alten Link und erneuert die Frist. Mindestens 60 Sekunden Abstand und höchstens fünf Versuche je Adresse pro Tag; höchstens 20 Versandaktionen je Trainer pro Stunde und 100 Empfänger je Gruppe pro Tag. Doppelte Adressen werden zusammengeführt, bestehende Mitglieder übersprungen. Historie: letzte 100 Einladungen, tägliche Löschung ab 30 Tagen nach Ablauf. Migration `0004_email_invitations.sql` erweitert die bestehende Tabelle; bisherige Gruppenlinks bleiben nutzbar. Keine zusätzlichen Secrets erforderlich.
 
 Zusätzlich wurden auf der öffentlichen Produktionsdomain vier unabhängige Konten über HTTP-Sitzungen getestet. Ein weiterer Browser-Test prüfte Registrierung, gespeicherte Teilnahme nach Neuladen, Trainerliste und Terminbearbeitung. Die Darstellung wurde mit 390 Pixeln Breite geprüft; dies ist kein Test auf einem physischen Android- oder iOS-Gerät. Ergebnisse und offene Schritte stehen in `docs/RELEASE_STATUS.md`.
 

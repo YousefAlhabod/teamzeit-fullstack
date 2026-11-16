@@ -5,8 +5,17 @@ Die geprüften Kernfunktionen sind für die Kurs- und Portfolio-Nutzung veröffe
 - App und öffentliche Demo: https://teamzeit.yousef-alhabod.de
 - Quellcode: https://github.com/YousefAlhabod/teamzeit-fullstack
 - Portfolio: https://yousef-alhabod.de/#teamzeit
-- Produktionsversion: 8636031c-7320-4704-a72a-8e030f88fe09
-- Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; drei Migrationen angewendet.
+- Produktionsversion: 410d4993-2e58-4378-9fc1-031403519195
+- Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; vier Migrationen angewendet.
+
+## Erweiterung: persönliche E-Mail-Einladungen
+
+- Mehrere Adressen unter „Gruppe & Einladen“, eigene Resend-Nachricht je Empfänger, ausschließlich gehashte Einmaltokens in D1, Empfängerbindung und automatische Mitgliedschaft nach Registrierung oder Annahme. Status ausstehend/angenommen/abgelaufen, Versandfehler, erneutes Senden und 1/3/7 Tage Gültigkeit sind implementiert.
+- 23 automatisierte Tests erfolgreich: zusätzlich Batch-Versand, Weitergabe an fremde Adresse, bestehende Konten, Tokenrotation, abgelaufene Links, Providerfehler, konkurrierender Versand, Rollen- und Gruppenisolation, Größenlimits, CSRF und Bereinigung.
+- Produktionsprüfung mit isolierter Gruppe und unabhängigen HTTP-Sitzungen: zwei individuelle Einladungen in einem echten Resend-Batch; beide Delivered. Erneuter Versand ebenfalls Delivered. IDs: 01a1e518-d9ed-7bea-b4ad-ba712f3d2995, 01a1e518-d9ed-7bd9-923d-e113a4c570ec, 01a1e51a-13cd-709e-9c99-8c13d7300142.
+- Falsche Empfängeradresse abgewiesen; Registrierung automatisch als Mitglied der richtigen Gruppe gespeichert. Beide persönlichen Einladungen anschließend als angenommen gespeichert, einschließlich des bestehenden Eigentümerkontos. Verbrauchte und ersetzte Links abgewiesen. Schutzfrist beim zu frühen erneuten Versand bestätigt.
+- Trainerformular auf der veröffentlichten App bei schmaler Browserbreite geprüft. Datenschutzhinweise um die persönliche Einladung erweitert. Bestehender Resend-Schlüssel und Hauptwebsite unverändert.
+- Isolierte Testgruppe samt zwei synthetischen Konten nach der Prüfung entfernt. Persönliches Trainerkonto und ursprüngliche Gruppe bleiben erhalten. Vor der Migration wurde ein privater D1-Export gesichert.
 
 ## Nachgewiesene Prüfungen
 

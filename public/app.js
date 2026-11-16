@@ -3,7 +3,7 @@ const root=document.getElementById('app-root');
 const modal=document.getElementById('modal');
 const modalContent=document.getElementById('modal-content');
 const toastNode=document.getElementById('toast');
-const state={mode:null,user:null,group:null,groups:[],events:[],members:[],demoRole:'trainer',panel:'events',invite:null,loading:false};
+const state={mode:null,user:null,group:null,groups:[],events:[],members:[],demoRole:'trainer',panel:'events',invite:null,emailInvitations:[],invitePreview:null,loading:false};
 const incoming=new URLSearchParams(location.hash.slice(1));
 let incomingInvite=incoming.get('invite')||'';
 let resetToken=incoming.get('reset')||'';
@@ -42,7 +42,7 @@ function withCounts(event){
   return {...event,counts};
 }
 function startDemo(){
-  state.invite=null;
+  state.invite=null;state.emailInvitations=[];state.invitePreview=null;
   state.mode='demo';state.user={id:'demo-user',name:'Yousef (Demo)',email:'demo@teamzeit.example'};
   state.group={id:'demo',name:'Die wilden Waden (Demo)',role:'trainer'};
   state.events=loadDemo();state.demoRole='trainer';state.panel='events';renderApp();scrollApp();
@@ -62,15 +62,25 @@ async function renderAuth(){
   try{const setup=await call('/setup/status');initialized=setup.initialized;registrationEnabled=setup.registrationEnabled;}catch{}
   if(state.panel==='setup' || !initialized)state.panel='setup';
   const m=state.panel;
+  if(incomingInvite&&['register','login'].includes(m)){
+    try{state.invitePreview=await call('/invites/preview','POST',{inviteCode:incomingInvite});}
+    catch(error){root.innerHTML=`<div class="auth-pane"><h3>Einladung nicht verfügbar</h3><p>${escapeHtml(error.message)}</p><button class="btn btn-primary" data-action="auth-login-clear">Zur Anmeldung</button><button class="link-button" data-action="start-demo">Demo öffnen</button></div>`;return;}
+    if(m==='register'){
+      let me;try{me=await call('/me')}catch{}
+      if(me?.user&&(!state.invitePreview.email||me.user.email===state.invitePreview.email)){
+        state.user=me.user;root.innerHTML=`<div class="auth-pane"><h3>Einladung zu ${escapeHtml(state.invitePreview.groupName)}</h3><p>Angemeldet als ${escapeHtml(me.user.name)} (${escapeHtml(me.user.email)}).</p><p>Mit der Annahme trittst du dieser Gruppe bei. Trainer sehen deinen Anzeigenamen und deine Teilnahmeantworten.</p><button class="btn btn-primary" data-action="accept-invite">Einladung annehmen</button><p><a href="/datenschutz.html">Datenschutzhinweise</a></p></div>`;return;
+      }
+    }
+  }
   if(m==='forgot'||m==='reset'){
     root.innerHTML=`<div class="auth-pane"><h3>${m==='forgot'?'Passwort vergessen?':'Neues Passwort festlegen'}</h3><form class="form-stack" id="auth-form" data-form="${m}">${m==='forgot'?'<label>E-Mail<input name="email" type="email" autocomplete="email" required></label>':'<label>Neues Passwort<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>'}<p class="inline-alert" data-form-error hidden></p><button class="btn btn-primary" type="submit">${m==='forgot'?'Link anfordern':'Passwort speichern'}</button></form><button class="link-button" data-action="auth-login">Zur Anmeldung</button></div>`;return;
   }
   const isLogin=m==='login',isRegister=m==='register',isSetup=m==='setup';
   const title=isSetup?'Erste Gruppe einrichten':isRegister?'Mit Einladung beitreten':'Willkommen zurück';
-  const sub=isSetup?'Einmalige Einrichtung auf dem eigenen Cloudflare-Projekt.':isRegister?'Einladungscode vom Trainer benötigt.':'Melden Sie sich mit Ihrem TeamZeit-Konto an.';
+  const sub=isSetup?'Einmalige Einrichtung auf dem eigenen Cloudflare-Projekt.':isRegister?(state.invitePreview?`Einladung zur Gruppe ${escapeHtml(state.invitePreview.groupName)}. Nach der Registrierung bist du automatisch Mitglied.`:'Einladungscode vom Trainer benötigt.'):'Melden Sie sich mit Ihrem TeamZeit-Konto an.';
   root.innerHTML=`<div class="auth-pane"><h3>${title}</h3><p>${sub}</p><form class="form-stack" id="auth-form" data-form="${m}">
     ${!isLogin?'<label>Name<input name="name" autocomplete="name" maxlength="80" required></label>':''}
-    <label>E-Mail<input type="email" name="email" autocomplete="email" maxlength="254" required></label>
+    <label>E-Mail<input type="email" name="email" autocomplete="email" maxlength="254" value="${escapeHtml(incomingInvite?state.invitePreview?.email||'':'')}" ${incomingInvite&&state.invitePreview?.email?'readonly':''} required></label>
     <label>Passwort<input name="password" type="password" autocomplete="${isLogin?'current-password':'new-password'}" minlength="${isLogin?1:12}" required></label>
     ${isRegister?`<label>Einladungscode<input name="inviteCode" value="${escapeHtml(incomingInvite)}" spellcheck="false" autocomplete="off" required></label><label class="checkbox-label"><input name="privacyAccepted" type="checkbox" required> Ich habe die <a href="/datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> gelesen. Keine Gesundheitsdaten eingeben.</label>${!registrationEnabled?'<p>Neue Konten sind derzeit noch nicht freigeschaltet. Die Demo ist sofort verfügbar.</p>':''}`:''}
     ${isSetup?'<label>Einrichtungscode (SETUP_TOKEN)<input name="setupToken" type="password" required></label><label>Name der Sportgruppe<input name="groupName" value="Die wilden Waden" required maxlength="80"></label>':''}
@@ -78,7 +88,7 @@ async function renderAuth(){
     <div class="auth-toggle">${isLogin?'<button class="link-button" data-action="auth-forgot">Passwort vergessen?</button>':''}${!isSetup?`<button class="link-button" data-action="auth-${isLogin?'register':'login'}">${isLogin?'Einladung erhalten? Registrieren':'Bereits registriert? Anmelden'}</button>`:''}<button class="link-button" data-action="start-demo">Ohne Anmeldung testen</button></div></div>`;
 }
 async function loadLive(){
- const me=await call('/me');state.user=me.user;state.groups=me.groups;state.group=me.groups.find(g=>g.id===state.group?.id)||me.groups[0]||null;state.mode='live';state.panel='events';state.invite=null;
+ const me=await call('/me');state.user=me.user;state.groups=me.groups;state.group=me.groups.find(g=>g.id===state.group?.id)||me.groups[0]||null;state.mode='live';state.panel='events';state.invite=null;state.emailInvitations=[];
  if(state.group){const events=await call(`/groups/${state.group.id}/events`);state.events=events.events}else state.events=[];
  renderApp();scrollApp();
 }
@@ -103,10 +113,27 @@ function renderApp(){
  root.innerHTML=html;
  document.getElementById('nav-auth').textContent=state.mode==='demo'?'Demo geöffnet':myName();
 }
-function renderSettings(){
+function renderSettings(){return renderEmailInviteSettings()+renderLegacySettings();}
+function renderLegacySettings(){
  if(!isTrainer())return '<div class="inline-alert">Nur für Trainer sichtbar.</div>';
  return `<div class="settings-panel"><h4>Mitglieder einladen</h4><p>Teilen Sie den Einladungslink mit Freunden. Er gilt 7 Tage und kann von bis zu 25 Personen verwendet werden.</p><button class="btn btn-primary" data-action="invite">Einladung erstellen</button>${state.invite?`<div class="token-display">${escapeHtml(state.invite.inviteUrl||state.invite.inviteCode)}</div><button class="link-button" data-action="copy-invite">Link kopieren</button><p>Gültig bis ${escapeHtml(new Date(state.invite.expiresAt).toLocaleString('de-DE'))}</p>`:''}</div>
  <div class="settings-panel"><h4>Datenschutz und Zugriff</h4><p>Trainer sehen die Teilnehmerliste. Mitglieder sehen nur die eigene Antwort. Echte personenbezogene Daten erst nach Datenschutzprüfung verwenden.</p>${state.mode==='live'?'<button class="btn btn-secondary" data-action="show-members">Mitglieder verwalten</button><button class="link-button" data-action="delete-group">Gruppe löschen</button>':''}</div>`
+}
+function renderEmailInviteSettings(){
+ if(!isTrainer())return '';
+ const labels={pending:'Ausstehend',accepted:'Angenommen',expired:'Abgelaufen'},delivery={pending:'Versand läuft / unbestätigt',sent:'Versendet',failed:'Versand nicht bestätigt / fehlgeschlagen'};
+ return `<div class="settings-panel"><h4>Persönlich per E-Mail einladen</h4><p>Jede Person erhält einen eigenen, einmaligen Link für ${escapeHtml(state.group?.name)}. Der Link gilt ausschließlich für die angegebene E-Mail-Adresse. Bestehende Konten können sich anmelden und die Einladung annehmen.</p>
+ <form class="form-stack" id="email-invite-form"><label>E-Mail-Adressen<textarea name="emails" rows="4" maxlength="6000" placeholder="anna@example.de&#10;ben@example.de" required ${state.mode==='demo'?'disabled':''}></textarea></label><small>Bis zu 20 Adressen, getrennt durch Zeilenumbrüche, Kommas oder Semikolons. Nur erwünschte Einladungen versenden.</small><label>Gültigkeit<select name="expiresInDays" id="email-invite-days"><option value="7">7 Tage</option><option value="3">3 Tage</option><option value="1">1 Tag</option></select></label><p class="inline-alert" data-form-error hidden></p><button class="btn btn-primary" type="submit" ${state.mode==='demo'?'disabled':''}>Einladungen per E-Mail senden</button></form>
+ ${state.mode==='demo'?'<p>In der Demo werden keine E-Mails versandt.</p>':''}<div id="email-invite-result" role="status"></div>
+ <div class="invitation-heading"><h4>Einladungsübersicht</h4>${state.mode==='live'?'<button class="link-button" data-action="refresh-email-invites">Aktualisieren</button>':''}</div><p class="muted">„Versendet“ bedeutet: vom Versanddienst angenommen. Ein erneuter Versand erzeugt einen neuen Link und macht den bisherigen ungültig. Höchstens fünf Versuche je Adresse pro Tag, mindestens 60 Sekunden Abstand.</p>
+ <ul class="email-invite-list">${state.emailInvitations.length?state.emailInvitations.map(item=>`<li class="email-invite-item"><div><strong>${escapeHtml(item.email)}</strong><p><span class="status-pill ${item.status==='accepted'?'yes':item.status==='expired'?'no':'maybe'}">${labels[item.status]}</span> <span>${escapeHtml(delivery[item.deliveryStatus]||'')}</span></p><small>Gültig bis ${escapeHtml(formatDate(item.expiresAt))}${item.acceptedAt?` · Angenommen am ${escapeHtml(formatDate(item.acceptedAt))}`:''}</small></div>${item.status!=='accepted'?`<button class="btn btn-secondary" data-action="resend-email-invite" data-id="${escapeHtml(item.id)}" ${!item.canResend?'disabled':''}>Erneut senden</button>`:''}</li>`).join(''):'<li>Noch keine persönlichen E-Mail-Einladungen.</li>'}</ul><small>Letzte 100 Einladungen. Historie bis 30 Tage nach Ablauf, anschließend tägliche Bereinigung.</small></div>`;
+}
+async function refreshEmailInvites(){
+ state.emailInvitations=state.mode==='live'?(await call(`/groups/${state.group.id}/email-invites`)).invitations:[];
+}
+function emailInviteResult(results){
+ const labels={sent:'Versendet',failed:'Versand nicht bestätigt – bitte später erneut senden',already_member:'Bereits Gruppenmitglied',cooldown:'Bitte mindestens 60 Sekunden warten',daily_limit:'Tageslimit für diese Adresse erreicht',changed:'Einladung wurde inzwischen geändert – bitte aktualisieren'};
+ const node=document.getElementById('email-invite-result');if(node)node.innerHTML=`<ul>${results.map(item=>`<li>${escapeHtml(item.email)}: ${escapeHtml(labels[item.status]||item.status)}</li>`).join('')}</ul>`;
 }
 function showEventForm(id){
  if(!isTrainer())return notify('Nur Trainer können Termine anlegen.',true);
@@ -163,6 +190,15 @@ async function performAction(button){
  if(action==='auth-register')return showAuth('register');
  if(action==='auth-login')return showAuth('login');
  if(action==='auth-forgot')return showAuth('forgot');
+ if(action==='auth-login-clear'){incomingInvite='';state.invitePreview=null;return showAuth('login');}
+ if(action==='accept-invite'){
+   const result=await call('/groups/join','POST',{inviteCode:incomingInvite});state.group={id:result.id};incomingInvite='';state.invitePreview=null;await loadLive();notify('Einladung angenommen. Willkommen in der Gruppe!');return;
+ }
+ if(action==='refresh-email-invites'){await refreshEmailInvites();renderApp();return;}
+ if(action==='resend-email-invite'){
+   button.disabled=true;
+   try{const result=await call(`/groups/${state.group.id}/email-invites/${id}/resend`,'POST',{expiresInDays:Number(document.getElementById('email-invite-days')?.value||7)});state.emailInvitations=result.invitations;renderApp();emailInviteResult(result.results);}finally{button.disabled=false;}return;
+ }
  if(action==='account'){
   openDialog('<h3>Mein Konto</h3><p>Sie können Ihre gespeicherten Konto- und Teilnahmedaten abrufen oder das Konto löschen.</p><button class="btn btn-secondary" data-action="export-account">Datenexport anzeigen</button><button class="link-button" data-action="delete-account">Konto endgültig löschen</button>');return;
  }
@@ -196,7 +232,7 @@ async function performAction(button){
  if(action==='end-demo'){state.mode=null;state.events=[];state.panel='login';renderAuth();return}
  if(action==='logout'){await call('/auth/logout','POST',{});state.mode=null;state.user=null;state.panel='login';renderAuth();notify('Abgemeldet.');return}
  if(action==='panel-events'){state.panel='events';renderApp();return}
- if(action==='panel-settings'){state.panel='settings';renderApp();return}
+ if(action==='panel-settings'){state.panel='settings';await refreshEmailInvites();renderApp();return}
  if(action==='demo-role'){state.demoRole=button.dataset.role;renderApp();return}
  if(action==='reset-demo'){state.events=defaultDemo();saveDemo();renderApp();notify('Demo zurückgesetzt.');return}
  if(action==='add-event')return showEventForm();
@@ -220,16 +256,24 @@ document.addEventListener('click',async ev=>{
  ev.preventDefault();try{await performAction(button)}catch(err){notify(err.message||'Fehler',true)}
 });
 document.addEventListener('submit',async ev=>{
- const form=ev.target;if(form.id!=='auth-form'&&form.id!=='event-form')return;
+ const form=ev.target;if(!['auth-form','event-form','email-invite-form'].includes(form.id))return;
  ev.preventDefault();const btn=form.querySelector('[type=submit]');if(btn.disabled)return;btn.disabled=true;
  try{
   if(form.id==='event-form')return await saveEvent(form);
   const data=Object.fromEntries(new FormData(form));
+  if(form.id==='email-invite-form'){
+    if(state.mode!=='live')throw Error('In der Demo werden keine E-Mails versandt.');
+    const result=await call(`/groups/${state.group.id}/email-invites`,'POST',{emails:data.emails,expiresInDays:Number(data.expiresInDays)});state.emailInvitations=result.invitations;renderApp();emailInviteResult(result.results);return;
+  }
   if(form.dataset.form==='forgot'){const result=await call('/auth/forgot-password','POST',data);notify(result.message);return;}
   if(form.dataset.form==='reset'){await call('/auth/reset-password','POST',{...data,token:resetToken});resetToken='';await showAuth('login');notify('Passwort geändert. Bitte neu anmelden.');return;}
-  if(form.dataset.form==='login')await call('/auth/login','POST',data);
+  if(form.dataset.form==='login'){
+    await call('/auth/login','POST',data);
+    if(incomingInvite){const joined=await call('/groups/join','POST',{inviteCode:incomingInvite});state.group={id:joined.id};incomingInvite='';state.invitePreview=null;}
+  }
   else if(form.dataset.form==='register')await call('/auth/register','POST',{...data,privacyAccepted:data.privacyAccepted==='on'});
   else if(form.dataset.form==='setup')await call('/setup','POST',data);
+  if(form.dataset.form==='register'){incomingInvite='';state.invitePreview=null;}
   await loadLive();notify('Willkommen bei TeamZeit!');
  }catch(err){errorIn(form,err.message)}finally{btn.disabled=false}
 });
@@ -242,7 +286,8 @@ document.addEventListener('submit',async ev=>{
 document.addEventListener('change',async event=>{
  if(event.target.id!=='group-select')return;
  state.group=state.groups.find(g=>g.id===event.target.value);state.invite=null;
- try{state.events=(await call(`/groups/${state.group.id}/events`)).events;renderApp();}catch(error){notify(error.message,true);}
+ state.emailInvitations=[];
+ try{state.events=(await call(`/groups/${state.group.id}/events`)).events;if(state.panel==='settings')await refreshEmailInvites();renderApp();}catch(error){notify(error.message,true);}
 });
 window.addEventListener('hashchange',()=>{
  const params=new URLSearchParams(location.hash.slice(1));

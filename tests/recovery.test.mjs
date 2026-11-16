@@ -5,7 +5,7 @@ import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 
 test('recovery email pipeline: generic reply, hashed expiring token, session revocation and replay protection',async()=>{
  const sent=[];
- const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789',RESEND_API_KEY:'test-key-never-sent',MAIL_FROM:'TeamZeit <test@example.invalid>',APP_ORIGIN:'https://teamzeit.example.invalid'},outboundService:async request=>{
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/email-invites.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789',RESEND_API_KEY:'test-key-never-sent',MAIL_FROM:'TeamZeit <test@example.invalid>',APP_ORIGIN:'https://teamzeit.example.invalid'},outboundService:async request=>{
   assert.equal(request.url,'https://api.resend.com/emails');sent.push(await request.json());return Response.json({id:'mock-mail-id'});
  }}));
  try{
