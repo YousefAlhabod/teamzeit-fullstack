@@ -1,0 +1,12 @@
+{
+ "$schema":"node_modules/wrangler/config-schema.json",
+ "name":"teamzeit-perf-staging",
+ "account_id":"9be816f99da25a8e3e7060c22f5fdb26",
+ "main":"scripts/staging-worker.js",
+ "compatibility_date":"2026-10-01",
+ "compatibility_flags":["nodejs_compat"],
+ "workers_dev":true,
+ "routes":[],
+ "vars":{"APP_ORIGIN":"https://teamzeit-perf-staging.devyousefalhabod.workers.dev","REGISTRATION_ENABLED":"true"},
+ "d1_databases":[{"binding":"DB","database_name":"teamzeit-perf-staging","database_id":"eba63996-3ef2-47b1-bca1-c2bdb01d57de","jurisdiction":"eu","migrations_dir":"migrations"}]
+}

@@ -1,0 +1,4 @@
+import {readFileSync,writeFileSync} from 'node:fs';import {randomBytes,createHash} from 'node:crypto';
+const file='.private/perf-staging.json',f=JSON.parse(readFileSync(file));if(f.databaseId!=='eba63996-3ef2-47b1-bca1-c2bdb01d57de')throw Error('Wrong staging database');
+const sql=[];for(const u of f.users){if(!/^[a-f0-9-]{36}$/.test(u.id))throw Error('Invalid fixture ID');const token=randomBytes(32).toString('hex');u.cookie=`teamzeit_session=${token}`;sql.push(`INSERT INTO sessions(token_hash,user_id,expires_at) VALUES('${createHash('sha256').update(token).digest('hex')}','${u.id}','${new Date(Date.now()+86400000).toISOString()}');`);}
+writeFileSync('.private/perf-sessions.sql',sql.join('\n'));writeFileSync(file,JSON.stringify(f));console.log('Synthetic sessions prepared explicitly for API-only load.');
