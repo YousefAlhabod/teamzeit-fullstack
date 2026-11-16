@@ -1,6 +1,10 @@
 # TeamZeit
 
-Deutschsprachige Full-Stack-Portfolio-Version eines gemeinsam erarbeiteten Scrum-Kursprojekts. Trainingstermine und Teilnahmen für erwachsene Freizeitsportgruppen.
+Deutschsprachige Trainingsmanagement-Plattform auf Grundlage des bestehenden TeamZeit-Kursprojekts. Trainingstermine und Teilnahmen für erwachsene Freizeitsportgruppen.
+
+Die Plattform wird für regionale Sportorganisationen weiterentwickelt: Standorte mit mehreren Gruppen und Trainern, plattformweite bzw. standortbezogene Verwaltung, wöchentliche Trainingsserien, Teilnehmerlimits, atomare Wartelisten, Standort-/Zeitraumfilter und freiwillige Trainingsmails. Bestandskonten, Gruppen, Einladungen und Termine bleiben erhalten. Scrum-Projektinformationen liegen separat unter `/projekt` und benötigen eine Freigabe.
+
+**1.000 gleichzeitig aktive Nutzer sind ein verbindliches Ziel, keine bereits nachgewiesene Produktionskapazität.** Kriterien: [Product Backlog](docs/PRODUCT_BACKLOG.md). Reproduzierbarer isolierter Test: `npm run test:load`. Er verwendet keine Produktionsdatenbank, echten Konten oder E-Mails. Der vollständige lokale Abschlusslauf erreicht 1.000 erfolgreiche Anmeldungen und 0 % unerwartete Fehler, verfehlt aber das Antwortzeitziel. Tatsächliche Messwerte, Optimierungen und offene Abnahmeschritte: [Performance-Bericht](docs/PERFORMANCE.md).
 
 - Anwendung und Demo: https://teamzeit.yousef-alhabod.de
 - Portfolio: https://yousef-alhabod.de/#teamzeit
@@ -12,17 +16,9 @@ Anmeldung und Abmeldung, Trainer- und Mitgliederrollen pro Gruppe, Gruppen anleg
 
 Cloudflare Workers stellt API und statische Dateien bereit. Eine separate D1-Datenbank mit EU-Jurisdiktion speichert Konten und Gruppendaten. Neue Passwörter verwenden scrypt (N=16384, r=8, p=5, zufälliger Salt). Ursprüngliche lokale PBKDF2-Konten behalten ihr Format. Sitzungen liegen als Hash in D1 und als Secure/HttpOnly/SameSite-Cookie im Browser. Einladungen und Rücksetztokens werden nur gehasht gespeichert. Berechtigungen werden serverseitig geprüft. Zähler begrenzen Anmelde- und Rücksetzversuche; ein täglicher Lauf bereinigt abgelaufene Sicherheitsdaten.
 
-## Ursprüngliche Teamrollen
+## Projektinformationen
 
-| Name | Kursrolle | Beitrag |
-| --- | --- | --- |
-| Vanessa | Product Owner | Produktwert und Priorisierung |
-| Ünal | Scrum Master | Scrum-Prozess und Moderation |
-| Stefan | Developer | US01: Termin erstellen |
-| Suzana | Developer | US02: Teilnahme melden |
-| Yousef | Developer | US03: Teilnehmerliste |
-
-**Yousef Alhabod – Full-Stack Developer der eigenständigen TeamZeit-Portfolio-Version.** Die technische Weiterentwicklung ersetzt nicht die Beiträge des ursprünglichen Scrum-Teams. Weitere Mitwirkende werden bis zur geklärten Zustimmung nur mit Vornamen genannt.
+Die ursprünglichen Kursrollen und Beiträge sind in der Anwendung unter `/projekt` getrennt von den Sportrollen dokumentiert. Die Seite benötigt Anmeldung und Projektfreigabe; die technischen Quellen bleiben wie bisher im Repository nachvollziehbar. Projektrollen vergeben keine Rechte für Standorte, Gruppen oder Buchungen.
 
 ## Lokal entwickeln
 
@@ -48,7 +44,17 @@ Die Passwort-Wiederherstellung verwendet die verifizierte Resend-Senderdomain `m
 
 ## Validierung
 
-`npm run check` prüft Syntax und führt 23 Tests aus, darunter integrierte Worker/D1-Abläufe mit vier Konten, Rollen, getrennten Gruppen, persönlichen E-Mail-Einladungen, Terminen, veränderten Antworten, neuen Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung und Schutz der letzten Trainerrolle.
+`npm run check` prüft Syntax und führt 30 Tests aus, darunter integrierte Worker/D1-Abläufe mit vier Konten, regionalen Rollen, getrennten Gruppen, persönlichen E-Mail-Einladungen, Terminserien über Zeitumstellungen, konkurrierenden Platzbuchungen und Wartelisten, Nachrücken bei Kontolöschung oder Gruppenentfernung, Benachrichtigungen, veränderten Antworten, neuen Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung und Schutz der letzten Trainerrolle.
+
+### Standorte, Rollen und Betrieb
+
+Migration 0005 ergänzt die vorhandenen Tabellen additiv. Bestehende Gruppen erhalten zunächst „Standort noch nicht zugeordnet“, bestehende Zusagen bleiben bestätigt und bestehende Termine unbegrenzt. Reale Standorte werden durch die Plattformadministration angelegt und bestehende Gruppen anschließend zugeordnet; Beispielstädte werden nicht als reale Trainingsstandorte erfunden.
+
+Plattformadministratoren verwalten alle Standorte; Standortverantwortliche ausschließlich die ihnen zugewiesenen Standorte; Gruppentrainer verwalten Termine und Mitglieder; Mitglieder buchen eigene Plätze. Projekt-Reviewer haben ausschließlich Zugriff auf `/projekt`. Gruppenanlage in regionalen Standorten ist der zuständigen Verwaltung vorbehalten. Bisherige Trainer nicht zugeordneter Gruppen können weiterhin solche Gruppen anlegen. Bei einer neuen Installation wird nach der bestehenden einmaligen Einrichtung das vorgesehene Betreiberkonto über einen autorisierten Datenbankzugang in `platform_admins` eingetragen; eine öffentliche Selbstvergabe existiert nicht.
+
+Serien erzeugen 1–26 konkrete wöchentliche Termine in einer Transaktion mit gleicher Berliner Ortszeit. Bearbeitung oder Absage gilt jeweils für den einzelnen Termin. Bei nicht existierender Uhrzeit durch Zeitumstellung wird die gesamte Serie abgewiesen. Einzeltermine sind separat filter- und buchbar. Bei vollem Termin wird eine Zusage auf die Warteliste gesetzt. Absage, Entfernung oder Kontolöschung lässt automatisch die älteste wartende Person nachrücken; bei gleicher Eingangszeit entscheidet stabil die Nutzer-ID. Die Datenbank schützt das Limit auch bei konkurrierenden Änderungen.
+
+Trainingsmails sind standardmäßig aus und unter Mein Konto aktivierbar. Eine persistente Outbox sendet Nachrück-, Änderungs- und Absagenachrichten einzeln mit Resend-Idempotenzschlüsseln. Alle fünf Minuten werden höchstens zehn Nachrichten verarbeitet, mit maximal fünf Versuchen. Abwahl entfernt offene Nachrichten. Diese kostensparende Basiskonfiguration sowie das vorhandene Providerkontingent sind noch keine Massenversandkapazität für 1.000 Mitglieder. Die tägliche Bereinigung entfernt erfolgreiche Outboxeinträge nach sieben Tagen, übrige nach 30 Tagen. Vor produktivem Wachstum müssen Versandkontingent, Queue-Durchsatz, Monitoring und Fehlerbehandlung dimensioniert werden.
 
 ### Persönliche E-Mail-Einladungen
 

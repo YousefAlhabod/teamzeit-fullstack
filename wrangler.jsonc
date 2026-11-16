@@ -5,7 +5,7 @@
   "workers_dev": true,
   "routes": [{"pattern":"teamzeit.yousef-alhabod.de","custom_domain":true}],
   "vars": {"APP_ORIGIN":"https://teamzeit.yousef-alhabod.de","REGISTRATION_ENABLED":"true","MAIL_FROM":"TeamZeit <noreply@mail.teamzeit.yousef-alhabod.de>"},
-  "triggers": {"crons":["17 3 * * *"]},
+  "triggers": {"crons":["17 3 * * *","*/5 * * * *"]},
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],

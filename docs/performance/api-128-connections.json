@@ -1,0 +1,169 @@
+{
+  "at": "2026-11-16T17:29:13.538Z",
+  "environment": {
+    "kind": "isolated local Miniflare + workerd + D1 SQLite",
+    "platform": "win32",
+    "release": "10.0.19045",
+    "node": "v26.13.1",
+    "cpu": "Intel(R) Core(TM) i5-7300HQ CPU @ 2.50GHz",
+    "logicalCpus": 4,
+    "memoryGB": 11.9,
+    "uvThreadpool": "default (4)",
+    "commit": "ac52a2107615606d363ef35f83b3f7ffb747e149",
+    "sourceHash": "7d33bf358c0a597ef46f4a0886051ee096b82a26f184e89b905133915f6f88ad"
+  },
+  "scenario": {
+    "users": 1000,
+    "activeUsers": 1000,
+    "authMode": "seeded",
+    "transportConnections": 128,
+    "loginSuccess": 0,
+    "seededSessions": 1000,
+    "fixtureSessionsAfterFailedLogins": 0,
+    "groups": 50,
+    "events": 600,
+    "rampSeconds": 60,
+    "loginSeconds": 0,
+    "mixedSeconds": 51.75,
+    "contentionSeconds": 9.47,
+    "maxInFlight": 1000,
+    "thinkMs": "deterministic 500..5000",
+    "realMail": false,
+    "remoteDatabase": false
+  },
+  "operations": {
+    "events": {
+      "requests": 2000,
+      "errors": 0,
+      "errorPercent": 0,
+      "p50": 3877,
+      "p95": 5701,
+      "p99": 5841,
+      "max": 6589,
+      "targetMet": false
+    },
+    "book": {
+      "requests": 2000,
+      "errors": 0,
+      "errorPercent": 0,
+      "p50": 5588,
+      "p95": 7156,
+      "p99": 7553,
+      "max": 7769,
+      "targetMet": false
+    },
+    "maybe": {
+      "requests": 1000,
+      "errors": 0,
+      "errorPercent": 0,
+      "p50": 5633,
+      "p95": 7153,
+      "p99": 7247,
+      "max": 7307,
+      "targetMet": false
+    },
+    "cancel": {
+      "requests": 1000,
+      "errors": 0,
+      "errorPercent": 0,
+      "p50": 4873,
+      "p95": 6261,
+      "p99": 6730,
+      "max": 7769,
+      "targetMet": false
+    },
+    "security": {
+      "requests": 1000,
+      "errors": 0,
+      "errorPercent": 0,
+      "p50": 4600,
+      "p95": 5589,
+      "p99": 5692,
+      "max": 5693,
+      "targetMet": false
+    },
+    "contention": {
+      "requests": 1000,
+      "errors": 0,
+      "errorPercent": 0,
+      "p50": 4946,
+      "p95": 9347,
+      "p99": 9364,
+      "max": 9365,
+      "targetMet": false
+    }
+  },
+  "overall": {
+    "requests": 7000,
+    "errors": 0,
+    "errorPercent": 0,
+    "p50": 4896,
+    "p95": 7224,
+    "p99": 9346,
+    "max": 9365,
+    "targetMet": false
+  },
+  "invariants": {
+    "violations": [],
+    "hotConfirmed": 50,
+    "hotWaitlisted": 950
+  },
+  "queryPlans": {
+    "events": {
+      "success": true,
+      "meta": {
+        "served_by": "miniflare.db",
+        "served_by_primary": true,
+        "total_attempts": 1,
+        "timings": {
+          "sql_duration_ms": 0
+        },
+        "duration": 0,
+        "changes": 0,
+        "last_row_id": 2000,
+        "changed_db": false,
+        "size_after": 2453504,
+        "rows_read": 0,
+        "rows_written": 0
+      },
+      "results": [
+        {
+          "id": 5,
+          "parent": 0,
+          "notused": 51,
+          "detail": "SEARCH training_events USING INDEX idx_events_group_start (group_id=? AND start_at>?)"
+        }
+      ]
+    },
+    "queue": {
+      "success": true,
+      "meta": {
+        "served_by": "miniflare.db",
+        "served_by_primary": true,
+        "total_attempts": 1,
+        "timings": {
+          "sql_duration_ms": 0
+        },
+        "duration": 0,
+        "changes": 0,
+        "last_row_id": 2000,
+        "changed_db": false,
+        "size_after": 2453504,
+        "rows_read": 0,
+        "rows_written": 0
+      },
+      "results": [
+        {
+          "id": 4,
+          "parent": 0,
+          "notused": 55,
+          "detail": "SEARCH responses USING COVERING INDEX idx_responses_queue (event_id=? AND booking_state=?)"
+        }
+      ]
+    }
+  },
+  "production1000UsersProven": false,
+  "totalSeconds": 103.41,
+  "rawFile": "test-results/load-1000-1794850153616.json",
+  "rawSha256": "adced472bffd1121a8820f02b6b9603f36613177096f4a7ad34a6a846dc319de"
+}

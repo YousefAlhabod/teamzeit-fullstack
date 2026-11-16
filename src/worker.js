@@ -1,6 +1,8 @@
 import { HttpError, MAX_TEXT, textField, validEmail, validPassword, validDate, validStatus, safeEqual, publicUser, formatEvent } from './core.js';
 import {pbkdf2,scrypt} from 'node:crypto';
 import {listEmailInvitations,sendEmailInvitations} from './email-invites.js';
+import {groupRole,groupsForUser,isAdmin,manageLocation,locationData,defaultLocation,createTraining,eventInput,bookTraining,promotion,enqueueEventChange,flushNotifications} from './platform.js';
+import {projectPage} from './project-page.js';
 
 const enc = new TextEncoder();
 const pbkdf2Iterations = 210000;
@@ -79,24 +81,25 @@ async function currentUser(request, env) {
 }
 async function requireUser(request,env){const user=await currentUser(request,env);if(!user)throw new HttpError(401,'Bitte anmelden.');return user;}
 async function membership(env,userId,groupId){
-  const row=await env.DB.prepare('SELECT role FROM memberships WHERE group_id=? AND user_id=?').bind(groupId,userId).first();
-  if(!row)throw new HttpError(403,'Keine Berechtigung für diese Gruppe.');
-  return row.role;
+  return groupRole(env,userId,groupId);
 }
 async function requireTrainer(env,userId,groupId){const role=await membership(env,userId,groupId);if(role!=='trainer')throw new HttpError(403,'Nur Trainer dürfen dies tun.');}
 async function eventWithRole(env,userId,eventId){
-  const row=await env.DB.prepare('SELECT group_id FROM training_events WHERE id=?').bind(eventId).first();
+  const row=await env.DB.prepare(`SELECT e.group_id,e.start_at,m.user_id IS NOT NULL AS is_member,CASE WHEN a.user_id IS NOT NULL OR lm.user_id IS NOT NULL THEN 'trainer' ELSE m.role END AS role FROM training_events e JOIN groups g ON g.id=e.group_id LEFT JOIN memberships m ON m.group_id=g.id AND m.user_id=? LEFT JOIN platform_admins a ON a.user_id=? LEFT JOIN location_managers lm ON lm.location_id=g.location_id AND lm.user_id=? WHERE e.id=?`).bind(userId,userId,userId,eventId).first();
   if(!row) throw new HttpError(404,'Termin nicht gefunden.');
-  const role=await membership(env,userId,row.group_id);
-  return {groupId:row.group_id,role};
+  if(!row.role)throw new HttpError(403,'Keine Berechtigung für diese Gruppe.');
+  return {groupId:row.group_id,role:row.role,event:row};
 }
-async function listEvents(env, groupId, userId, role) {
+async function listEvents(env, groupId, userId, role, query=new URLSearchParams()) {
+  const from=query.get('from')?validDate(query.get('from')):'0000',to=query.get('to')?validDate(query.get('to')):'9999';
+  const offset=Number(query.get('offset')||0);if(!Number.isInteger(offset)||offset<0||offset>10000)throw new HttpError(400,'Ungültige Seite.');
+  const trainerCounts=role==='trainer'?`,(SELECT COUNT(*) FROM responses rr WHERE rr.event_id=e.id AND rr.status='yes') AS yes_count,(SELECT COUNT(*) FROM responses rr WHERE rr.event_id=e.id AND rr.status='no') AS no_count,(SELECT COUNT(*) FROM responses rr WHERE rr.event_id=e.id AND rr.status='maybe') AS maybe_count`:'';
   const result=await env.DB.prepare(`SELECT e.*, r.status AS my_status,
-      (SELECT COUNT(*) FROM responses rr WHERE rr.event_id=e.id AND rr.status='yes') AS yes_count,
-      (SELECT COUNT(*) FROM responses rr WHERE rr.event_id=e.id AND rr.status='no') AS no_count,
-      (SELECT COUNT(*) FROM responses rr WHERE rr.event_id=e.id AND rr.status='maybe') AS maybe_count
+      r.booking_state AS my_booking_state,
+      (SELECT COUNT(*) FROM responses rr WHERE rr.event_id=e.id AND rr.booking_state='confirmed') AS confirmed_count,
+      (SELECT COUNT(*) FROM responses rr WHERE rr.event_id=e.id AND rr.booking_state='waitlisted') AS waitlist_count ${trainerCounts}
       FROM training_events e LEFT JOIN responses r ON r.event_id=e.id AND r.user_id=?
-      WHERE e.group_id=? ORDER BY e.start_at ASC LIMIT 150`).bind(userId,groupId).all();
+      WHERE e.group_id=? AND e.start_at>=? AND e.start_at<=? ORDER BY e.start_at,e.id LIMIT 150 OFFSET ?`).bind(userId,groupId,from,to,offset).all();
   return result.results.map(x=>formatEvent(x,role==='trainer'));
 }
 async function attemptLogin(env,email,password) {
@@ -232,32 +235,67 @@ async function api(request,env) {
   }
   if(method==='GET'&&path==='/api/me') {
     const user=await requireUser(request,env);
-    const groups=await env.DB.prepare('SELECT g.id,g.name,g.description,m.role FROM groups g JOIN memberships m ON m.group_id=g.id WHERE m.user_id=? ORDER BY g.created_at').bind(user.id).all();
-    return json({user:publicUser(user),groups:groups.results});
+    const groups=await groupsForUser(env,user.id),locations=await locationData(env,user.id);
+    return json({user:publicUser(user),groups,...locations});
   }
   if(method==='DELETE'&&path==='/api/me') {
     const user=await requireUser(request,env);
+    if(await isAdmin(env,user.id))throw new HttpError(409,'Plattformadministration vor Kontolöschung an ein anderes Konto übertragen.');
     const trainerGroups=await env.DB.prepare("SELECT COUNT(*) AS n FROM memberships m WHERE m.user_id=? AND m.role='trainer' AND NOT EXISTS(SELECT 1 FROM memberships m2 WHERE m2.group_id=m.group_id AND m2.user_id<>m.user_id AND m2.role='trainer')").bind(user.id).first();
     if(trainerGroups.n)throw new HttpError(409,'Zuerst eine weitere Trainerperson festlegen oder die Gruppe löschen.');
     await env.DB.batch([
       env.DB.prepare("UPDATE groups SET created_by=(SELECT user_id FROM memberships WHERE group_id=groups.id AND role='trainer' AND user_id<>? LIMIT 1) WHERE created_by=?").bind(user.id,user.id),
       env.DB.prepare('UPDATE training_events SET created_by=(SELECT created_by FROM groups WHERE id=training_events.group_id) WHERE created_by=?').bind(user.id),
       env.DB.prepare('UPDATE invitations SET created_by=(SELECT created_by FROM groups WHERE id=invitations.group_id) WHERE created_by=?').bind(user.id),
+      env.DB.prepare('UPDATE training_series SET created_by=(SELECT created_by FROM groups WHERE id=training_series.group_id) WHERE created_by=?').bind(user.id),
       env.DB.prepare('DELETE FROM invitations WHERE recipient_email=?').bind(user.email),
       env.DB.prepare('DELETE FROM users WHERE id=?').bind(user.id)
     ]);
     return json({ok:true},200,{'set-cookie':cookieAttrs(request,true)});
   }
   const user=await requireUser(request,env);
+  if(path==='/api/locations'&&method==='GET')return json(await locationData(env,user.id));
+  if(path==='/api/locations'&&method==='POST'){
+    if(!await isAdmin(env,user.id))throw new HttpError(403,'Nur Plattformadministration.');
+    const d=await params(request),id=crypto.randomUUID();
+    await env.DB.prepare('INSERT INTO locations(id,name,city) VALUES(?,?,?)').bind(id,textField(d.name,'Standortname',80),textField(d.city||'','Stadt',80,false)).run();return json({id},201);
+  }
+  if(path==='/api/admin/access'&&method==='POST'){
+    if(!await isAdmin(env,user.id))throw new HttpError(403,'Nur Plattformadministration.');
+    const d=await params(request),email=validEmail(d.email),target=await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
+    if(!target)throw new HttpError(404,'Bestehendes Konto nicht gefunden.');
+    if(!['platform_admin','location_manager','project_reviewer'].includes(d.role)||typeof d.enabled!=='boolean')throw new HttpError(400,'Ungültige Rollenänderung.');
+    if(d.role==='location_manager'){
+      const lid=pickId(d.locationId);if(!await env.DB.prepare('SELECT id FROM locations WHERE id=?').bind(lid).first())throw new HttpError(404,'Standort nicht gefunden.');
+      await env.DB.prepare(d.enabled?'INSERT OR IGNORE INTO location_managers(location_id,user_id) VALUES(?,?)':'DELETE FROM location_managers WHERE location_id=? AND user_id=?').bind(lid,target.id).run();
+    }else{
+      const table=d.role==='platform_admin'?'platform_admins':'project_access';
+      try{await env.DB.prepare(d.enabled?`INSERT OR IGNORE INTO ${table}(user_id) VALUES(?)`:`DELETE FROM ${table} WHERE user_id=?`).bind(target.id).run();}catch{throw new HttpError(409,'Die letzte Plattformadministration muss erhalten bleiben.');}
+    }return json({ok:true});
+  }
+  if(path==='/api/me/notifications'&&['GET','PATCH'].includes(method)){
+    if(method==='PATCH'){const d=await params(request);if(typeof d.enabled!=='boolean')throw new HttpError(400,'Ungültige Einstellung.');await env.DB.batch([env.DB.prepare('UPDATE users SET training_notifications=? WHERE id=?').bind(Number(d.enabled),user.id),env.DB.prepare("DELETE FROM notification_outbox WHERE user_id=? AND status IN ('pending','processing') AND ?=0").bind(user.id,Number(d.enabled))]);}
+    const row=await env.DB.prepare('SELECT training_notifications FROM users WHERE id=?').bind(user.id).first();return json({enabled:!!row.training_notifications});
+  }
+  let locationRoute=routeMatch(path,'/api/locations/:locationId');
+  if(locationRoute&&method==='PATCH'){
+    const lid=pickId(locationRoute.locationId);await manageLocation(env,user.id,lid);const d=await params(request);
+    const r=await env.DB.prepare('UPDATE locations SET name=?,city=? WHERE id=?').bind(textField(d.name,'Standortname',80),textField(d.city||'','Stadt',80,false),lid).run();if(!r.meta.changes)throw new HttpError(404,'Standort nicht gefunden.');return json({ok:true});
+  }
   if(path==='/api/me/export'&&method==='GET') {
-    const groups=await env.DB.prepare('SELECT g.name,m.role,m.joined_at FROM memberships m JOIN groups g ON g.id=m.group_id WHERE m.user_id=?').bind(user.id).all();
-    const responses=await env.DB.prepare('SELECT e.title,e.start_at,r.status,r.updated_at FROM responses r JOIN training_events e ON e.id=r.event_id WHERE r.user_id=?').bind(user.id).all();
-    return json({user:publicUser(user),groups:groups.results,responses:responses.results});
+    const groups=await env.DB.prepare('SELECT g.name,m.role,m.joined_at,l.name AS location,l.city FROM memberships m JOIN groups g ON g.id=m.group_id JOIN locations l ON l.id=g.location_id WHERE m.user_id=?').bind(user.id).all();
+    const responses=await env.DB.prepare('SELECT e.title,e.start_at,r.status,r.booking_state,r.queued_at,r.updated_at FROM responses r JOIN training_events e ON e.id=r.event_id WHERE r.user_id=?').bind(user.id).all();
+    const settings=await env.DB.prepare('SELECT training_notifications FROM users WHERE id=?').bind(user.id).first();
+    const managed=await env.DB.prepare('SELECT l.name,l.city FROM location_managers m JOIN locations l ON l.id=m.location_id WHERE m.user_id=?').bind(user.id).all();
+    return json({user:publicUser(user),groups:groups.results,responses:responses.results,trainingNotifications:!!settings.training_notifications,access:{platformAdmin:await isAdmin(env,user.id),managedLocations:managed.results,projectReviewer:!!await env.DB.prepare('SELECT user_id FROM project_access WHERE user_id=?').bind(user.id).first()}});
   }
   if(path==='/api/groups'&&method==='POST') {
     const data=await params(request),id=crypto.randomUUID();
+    const lid=data.locationId?pickId(data.locationId):defaultLocation;
+    if(lid!==defaultLocation)await manageLocation(env,user.id,lid);
+    else if(!await isAdmin(env,user.id)&&!await env.DB.prepare("SELECT 1 FROM memberships m JOIN groups g ON g.id=m.group_id WHERE m.user_id=? AND m.role='trainer' AND g.location_id=? LIMIT 1").bind(user.id,defaultLocation).first())throw new HttpError(403,'Neue Gruppen werden durch die Standort- oder Plattformverwaltung angelegt.');
     await env.DB.batch([
-      env.DB.prepare('INSERT INTO groups(id,name,description,created_by) VALUES(?,?,?,?)').bind(id,textField(data.name,'Gruppenname',MAX_TEXT.group),textField(data.description||'','Beschreibung',800,false),user.id),
+      env.DB.prepare('INSERT INTO groups(id,name,description,created_by,location_id) VALUES(?,?,?,?,?)').bind(id,textField(data.name,'Gruppenname',MAX_TEXT.group),textField(data.description||'','Beschreibung',800,false),user.id,lid),
       env.DB.prepare("INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,'trainer')").bind(id,user.id)
     ]);return json({id},201);
   }
@@ -287,7 +325,15 @@ async function api(request,env) {
     const gid=pickId(groupRoute.groupId);await requireTrainer(env,user.id,gid);
     if(method==='PATCH'){
       const data=await params(request);
-      await env.DB.prepare('UPDATE groups SET name=?,description=? WHERE id=?').bind(textField(data.name,'Gruppenname',MAX_TEXT.group),textField(data.description||'','Beschreibung',800,false),gid).run();return json({ok:true});
+      const name=textField(data.name,'Gruppenname',MAX_TEXT.group),description=textField(data.description||'','Beschreibung',800,false);
+      let locationId;
+      if(data.locationId){
+        const old=await env.DB.prepare('SELECT location_id FROM groups WHERE id=?').bind(gid).first(),lid=pickId(data.locationId);
+        await manageLocation(env,user.id,old.location_id);await manageLocation(env,user.id,lid);
+        if(!await env.DB.prepare('SELECT id FROM locations WHERE id=?').bind(lid).first())throw new HttpError(404,'Standort nicht gefunden.');
+        locationId=lid;
+      }
+      await env.DB.prepare('UPDATE groups SET name=?,description=?,location_id=COALESCE(?,location_id) WHERE id=?').bind(name,description,locationId||null,gid).run();return json({ok:true});
     }
     await env.DB.prepare('DELETE FROM groups WHERE id=?').bind(gid).run();return json({ok:true});
   }
@@ -319,13 +365,10 @@ async function api(request,env) {
   route=routeMatch(path,'/api/groups/:groupId/events');
   if(route) {
     const gid=pickId(route.groupId);const role=await membership(env,user.id,gid);
-    if(method==='GET')return json({events:await listEvents(env,gid,user.id,role)});
+    if(method==='GET')return json({events:await listEvents(env,gid,user.id,role,u.searchParams)});
     if(method==='POST') {
       if(role!=='trainer')throw new HttpError(403,'Nur Trainer dürfen Termine anlegen.');
-      const data=await params(request);const id=crypto.randomUUID();
-      await env.DB.prepare('INSERT INTO training_events(id,group_id,title,start_at,location,notes,created_by) VALUES(?,?,?,?,?,?,?)')
-        .bind(id,gid,textField(data.title,'Titel',MAX_TEXT.title),validDate(data.startAt),textField(data.location,'Ort',MAX_TEXT.location),textField(data.notes||'','Hinweise',MAX_TEXT.notes,false),user.id).run();
-      return json({id},201);
+      return json(await createTraining(env,user,gid,await params(request)),201);
     }
   }
   route=routeMatch(path,'/api/groups/:groupId/invites');
@@ -348,27 +391,23 @@ async function api(request,env) {
   if(route&&(method==='PATCH'||method==='DELETE')) {
     const eid=pickId(route.eventId);const {groupId,role}=await eventWithRole(env,user.id,eid);
     if(role!=='trainer')throw new HttpError(403,'Nur Trainer dürfen Termine bearbeiten.');
-    if(method==='DELETE'){await env.DB.prepare('DELETE FROM training_events WHERE id=? AND group_id=?').bind(eid,groupId).run();return json({ok:true});}
+    if(method==='DELETE'){await env.DB.batch([enqueueEventChange(env,eid,'cancelled'),env.DB.prepare('DELETE FROM training_events WHERE id=? AND group_id=?').bind(eid,groupId)]);return json({ok:true});}
     const data=await params(request);
-    await env.DB.prepare('UPDATE training_events SET title=?,start_at=?,location=?,notes=? WHERE id=?')
-      .bind(textField(data.title,'Titel',MAX_TEXT.title),validDate(data.startAt),textField(data.location,'Ort',MAX_TEXT.location),textField(data.notes||'','Hinweise',MAX_TEXT.notes,false),eid).run();
+    const old=await env.DB.prepare('SELECT capacity FROM training_events WHERE id=?').bind(eid).first(),e=eventInput({...data,capacity:data.capacity===undefined?old.capacity:data.capacity});
+    try{await env.DB.batch([env.DB.prepare('UPDATE training_events SET title=?,start_at=?,location=?,notes=?,capacity=? WHERE id=?').bind(e.title,e.startAt,e.location,e.notes,e.capacity,eid),promotion(env,eid),enqueueEventChange(env,eid,'changed')]);}catch(error){if(String(error).includes('Capacity below'))throw new HttpError(409,'Das Limit darf bestätigte Plätze nicht unterschreiten.');throw error;}
     return json({ok:true});
   }
   route=routeMatch(path,'/api/events/:eventId/rsvp');
   if(route&&method==='POST') {
-    const eid=pickId(route.eventId);await eventWithRole(env,user.id,eid);
+    const eid=pickId(route.eventId),context=await eventWithRole(env,user.id,eid);
     const data=await params(request);
-    if(data.status===null) await env.DB.prepare('DELETE FROM responses WHERE event_id=? AND user_id=?').bind(eid,user.id).run();
-    else await env.DB.prepare(`INSERT INTO responses(event_id,user_id,status,updated_at) VALUES(?,?,?,?)
-      ON CONFLICT(event_id,user_id) DO UPDATE SET status=excluded.status,updated_at=excluded.updated_at`)
-      .bind(eid,user.id,validStatus(data.status),new Date().toISOString()).run();
-    return json({ok:true});
+    return json({ok:true,...await bookTraining(env,user.id,eid,data.status===null?null:validStatus(data.status),context.event)});
   }
   route=routeMatch(path,'/api/events/:eventId/participants');
   if(route&&method==='GET') {
     const eid=pickId(route.eventId);const {groupId,role}=await eventWithRole(env,user.id,eid);
     if(role!=='trainer')throw new HttpError(403,'Teilnehmerlisten sind nur für Trainer sichtbar.');
-    const people=await env.DB.prepare(`SELECT u.name, m.role, COALESCE(r.status,'open') AS status
+    const people=await env.DB.prepare(`SELECT u.name, m.role, COALESCE(r.status,'open') AS status,r.booking_state AS bookingState
       FROM memberships m JOIN users u ON u.id=m.user_id
       LEFT JOIN responses r ON r.user_id=u.id AND r.event_id=?
       WHERE m.group_id=? ORDER BY u.name`).bind(eid,groupId).all();
@@ -383,6 +422,13 @@ export default {
       url.protocol='https:';return Response.redirect(url.href,308);
     }
     const path=new URL(request.url).pathname;
+    if(path==='/projekt'||path==='/projekt/'){
+      const user=await currentUser(request,env);
+      if(!user)return json({error:'Bitte für die geschützten Projektinformationen anmelden.'},401);
+      const access=await env.DB.prepare(`SELECT 1 AS ok WHERE EXISTS(SELECT 1 FROM platform_admins WHERE user_id=?) OR EXISTS(SELECT 1 FROM location_managers WHERE user_id=?) OR EXISTS(SELECT 1 FROM memberships WHERE user_id=? AND role='trainer') OR EXISTS(SELECT 1 FROM project_access WHERE user_id=?)`).bind(user.id,user.id,user.id,user.id).first();
+      if(!access)return json({error:'Keine Freigabe für Projektinformationen.'},403);
+      return new Response(projectPage,{headers:{...baseHeaders,'content-type':'text/html; charset=utf-8','content-security-policy':"default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"}});
+    }
     if(!path.startsWith('/api/')) {
       const response=await env.ASSETS.fetch(request);
       const headers=new Headers(response.headers);
@@ -402,12 +448,15 @@ export default {
     }
   },
   async scheduled(controller,env) {
+    await flushNotifications(env);
+    if(controller.cron&&controller.cron!=='17 3 * * *')return;
     const now=new Date().toISOString();
     await env.DB.batch([
       env.DB.prepare('DELETE FROM sessions WHERE expires_at<=?').bind(now),
       env.DB.prepare('DELETE FROM password_resets WHERE expires_at<=?').bind(now),
       env.DB.prepare('DELETE FROM invitations WHERE (recipient_email IS NULL AND expires_at<=?) OR (recipient_email IS NOT NULL AND expires_at<=?)').bind(now,new Date(Date.now()-30*86400000).toISOString()),
       env.DB.prepare('DELETE FROM request_limits WHERE expires_at<=?').bind(Date.now()),
+      env.DB.prepare("DELETE FROM notification_outbox WHERE created_at<datetime('now','-30 days') OR (status='sent' AND created_at<datetime('now','-7 days'))"),
       env.DB.prepare('DELETE FROM login_attempts WHERE first_at<? AND (blocked_until IS NULL OR blocked_until<?)').bind(new Date(Date.now()-86400000).toISOString(),now)
     ]);
   }

@@ -4,7 +4,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 
 test('real Worker + isolated D1: four accounts, permissions, invitations, persistence and recovery',async()=>{
- const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/email-invites.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789'}}));
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/email-invites.js'},{type:'ESModule',path:'src/platform.js'},{type:'ESModule',path:'src/project-page.js'},{type:'ESModule',path:'public/time.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789'}}));
  try{
   const db=await mf.getD1Database('DB');
   for(const name of readdirSync('migrations').sort()){
@@ -51,7 +51,9 @@ test('real Worker + isolated D1: four accounts, permissions, invitations, persis
   assert.equal((await req(secondDevice,`/groups/${gid}/events`)).events[0].myResponse,'maybe');
   await req(trainer,`/events/${event.id}`,'PATCH',{title:'Geändert',startAt:'2026-12-19T17:30:00.000Z',location:'Andere Halle',notes:''});
   assert.equal((await req(secondDevice,`/groups/${gid}/events`)).events[0].title,'Geändert');
-  const other=await req(clients[3],'/groups','POST',{name:'Andere Gruppe'},201);
+  await req(clients[3],'/groups','POST',{name:'Andere Gruppe'},403);
+  const other={id:crypto.randomUUID()},otherOwner=(await req(clients[3],'/me')).user.id;
+  await db.batch([db.prepare('INSERT INTO groups(id,name,created_by) VALUES(?,?,?)').bind(other.id,'Andere Gruppe',otherOwner),db.prepare("INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,'trainer')").bind(other.id,otherOwner)]);
   await req(clients[1],`/groups/${other.id}/events`,'GET',undefined,403);
   const members=(await req(trainer,`/groups/${gid}/members`)).members;
   const removed=members.find(x=>x.name==='Test Mitglied 2');
