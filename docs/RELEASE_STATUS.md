@@ -8,8 +8,6 @@ Die geprüften Kernfunktionen und die erste regionale Ausbaustufe sind veröffen
 - Produktionsversion: 0e8ef469-770d-422d-bf84-50125e55a411
 - Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; fünf Migrationen angewendet.
 
-## Regionale Ausbaustufe
-
 ## Nachfolgende gezielte Performance-Optimierung
 
 Nur Authentifizierungs-/Berechtigungsabfragen und Buchungsrückgabe optimiert; kein Redesign, keine neuen Produktfunktionen, keine Datenmigration. 32 Regressionstests erfolgreich. Echter privater Cloudflare-Staging-Vergleich mit je 1.000 aktiven API-Nutzern für 120 Sekunden: p95 Abfrage 171→119 ms, Buchung 244→138 ms, Absage 261→143 ms, API-Fehler insgesamt 2,971→0 %. Zusätzlich harte gleichzeitige Buchungsspitze: p95 5.443→3.842 ms. 50 bestätigte Plätze, 950 Wartende, keine Überbuchung oder unberechtigte Buchung und keine Test-E-Mails.
