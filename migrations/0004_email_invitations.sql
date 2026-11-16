@@ -1,0 +1,12 @@
+ALTER TABLE invitations ADD COLUMN id TEXT;
+ALTER TABLE invitations ADD COLUMN recipient_email TEXT;
+ALTER TABLE invitations ADD COLUMN accepted_at TEXT;
+ALTER TABLE invitations ADD COLUMN accepted_by TEXT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE invitations ADD COLUMN delivery_status TEXT NOT NULL DEFAULT 'sent';
+ALTER TABLE invitations ADD COLUMN last_sent_at TEXT;
+ALTER TABLE invitations ADD COLUMN send_attempted_at TEXT;
+ALTER TABLE invitations ADD COLUMN provider_id TEXT;
+ALTER TABLE invitations ADD COLUMN send_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE invitations ADD COLUMN send_window_at TEXT;
+CREATE UNIQUE INDEX idx_invitation_id ON invitations(id) WHERE id IS NOT NULL;
+CREATE UNIQUE INDEX idx_invitation_recipient ON invitations(group_id,recipient_email) WHERE recipient_email IS NOT NULL;

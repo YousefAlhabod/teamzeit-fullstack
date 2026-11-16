@@ -1,5 +1,6 @@
 import { HttpError, MAX_TEXT, textField, validEmail, validPassword, validDate, validStatus, safeEqual, publicUser, formatEvent } from './core.js';
 import {pbkdf2,scrypt} from 'node:crypto';
+import {listEmailInvitations,sendEmailInvitations} from './email-invites.js';
 
 const enc = new TextEncoder();
 const pbkdf2Iterations = 210000;
@@ -24,14 +25,14 @@ function registrationAllowed(request, env) {
   if(!['localhost','127.0.0.1','[::1]'].includes(host) && env.REGISTRATION_ENABLED!=='true')
     throw new HttpError(503,'Registrierung noch nicht freigeschaltet. Die Demo ist ohne Anmeldung verfügbar.');
 }
-async function rateLimit(env,key,limit=15,seconds=900) {
+async function rateLimit(env,key,limit=15,seconds=900,amount=1) {
   const now=Date.now();
   const secret=await crypto.subtle.importKey('raw',enc.encode(env.RATE_LIMIT_SECRET||'local-test-only'),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   const identifier=codeHex(await crypto.subtle.sign('HMAC',secret,enc.encode(key)));
-  const row=await env.DB.prepare(`INSERT INTO request_limits(key,count,expires_at) VALUES(?,1,?)
-    ON CONFLICT(key) DO UPDATE SET count=CASE WHEN expires_at<=? THEN 1 ELSE count+1 END,
+  const row=await env.DB.prepare(`INSERT INTO request_limits(key,count,expires_at) VALUES(?,?,?)
+    ON CONFLICT(key) DO UPDATE SET count=CASE WHEN expires_at<=? THEN excluded.count ELSE count+excluded.count END,
     expires_at=CASE WHEN expires_at<=? THEN excluded.expires_at ELSE expires_at END RETURNING count`)
-    .bind(identifier,now+seconds*1000,now,now).first();
+    .bind(identifier,amount,now+seconds*1000,now,now).first();
   if(row.count>limit)throw new HttpError(429,'Zu viele Anfragen. Bitte später erneut versuchen.');
 }
 async function hashPassword(password, saltHex, existingHash) {
@@ -138,6 +139,14 @@ async function api(request,env) {
     await rateLimit(env,`auth:${request.headers.get('cf-connecting-ip')||'local'}:${path}`,30);
   }
   if(method==='GET'&&path==='/api/health') return json({status:'ok',app:'TeamZeit',version:'1.0.0'});
+  if(method==='POST'&&path==='/api/invites/preview') {
+    await rateLimit(env,`invite-preview:${request.headers.get('cf-connecting-ip')||'local'}`,60);
+    const data=await params(request),raw=String(data.inviteCode||'').replaceAll('-','').trim().toLowerCase();
+    if(!/^[0-9a-f]{32}$/.test(raw))throw new HttpError(400,'Ungültige Einladung.');
+    const row=await env.DB.prepare('SELECT i.recipient_email,i.expires_at,g.name FROM invitations i JOIN groups g ON g.id=i.group_id WHERE i.token_hash=? AND i.expires_at>? AND i.uses<i.max_uses').bind(await hashToken(raw),new Date().toISOString()).first();
+    if(!row)throw new HttpError(400,'Einladung ungültig, abgelaufen oder bereits angenommen.');
+    return json({email:row.recipient_email,groupName:row.name,expiresAt:row.expires_at});
+  }
   if(method==='GET'&&path==='/api/setup/status') {
     const result=await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first();
     return json({initialized:result.n>0,registrationEnabled:env.REGISTRATION_ENABLED==='true'||['localhost','127.0.0.1'].includes(u.hostname),recoveryEnabled:!!(env.RESEND_API_KEY&&env.MAIL_FROM&&env.APP_ORIGIN)});
@@ -174,11 +183,12 @@ async function api(request,env) {
     const hash=await hashToken(raw),now=new Date().toISOString();
     const invite=await env.DB.prepare('SELECT * FROM invitations WHERE token_hash=? AND expires_at>? AND uses<max_uses').bind(hash,now).first();
     if(!invite)throw new HttpError(400,'Einladung ungültig, abgelaufen oder aufgebraucht.');
+    if(invite.recipient_email&&invite.recipient_email!==email)throw new HttpError(403,'Diese persönliche Einladung gilt für eine andere E-Mail-Adresse.');
     const uid=crypto.randomUUID(),salt=randomToken(16),digest=await hashPassword(password,salt);
     try {await env.DB.batch([
-      env.DB.prepare('INSERT INTO users(id,name,email,password_hash,password_salt) VALUES(?,?,?,?,?)').bind(uid,name,email,digest,salt),
+      env.DB.prepare(`INSERT INTO users(id,name,email,password_hash,password_salt) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM invitations WHERE token_hash=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND uses<max_uses AND (recipient_email IS NULL OR recipient_email=?))`).bind(uid,name,email,digest,salt,hash,email),
       env.DB.prepare('INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,?)').bind(invite.group_id,uid,invite.role),
-      env.DB.prepare('UPDATE invitations SET uses=uses+1 WHERE token_hash=?').bind(hash)
+      env.DB.prepare('UPDATE invitations SET uses=uses+1,accepted_at=CASE WHEN recipient_email IS NOT NULL THEN ? ELSE accepted_at END,accepted_by=CASE WHEN recipient_email IS NOT NULL THEN ? ELSE accepted_by END WHERE token_hash=?').bind(now,uid,hash)
     ]);} catch {throw new HttpError(409,'Registrierung nicht möglich; E-Mail eventuell bereits verwendet.');}
     return issueSession(env,{id:uid,name,email},request);
   }
@@ -233,6 +243,7 @@ async function api(request,env) {
       env.DB.prepare("UPDATE groups SET created_by=(SELECT user_id FROM memberships WHERE group_id=groups.id AND role='trainer' AND user_id<>? LIMIT 1) WHERE created_by=?").bind(user.id,user.id),
       env.DB.prepare('UPDATE training_events SET created_by=(SELECT created_by FROM groups WHERE id=training_events.group_id) WHERE created_by=?').bind(user.id),
       env.DB.prepare('UPDATE invitations SET created_by=(SELECT created_by FROM groups WHERE id=invitations.group_id) WHERE created_by=?').bind(user.id),
+      env.DB.prepare('DELETE FROM invitations WHERE recipient_email=?').bind(user.email),
       env.DB.prepare('DELETE FROM users WHERE id=?').bind(user.id)
     ]);
     return json({ok:true},200,{'set-cookie':cookieAttrs(request,true)});
@@ -255,12 +266,21 @@ async function api(request,env) {
     if(!/^[0-9a-f]{32}$/.test(raw))throw new HttpError(400,'Ungültiger Einladungscode.');
     const hash=await hashToken(raw),invite=await env.DB.prepare('SELECT * FROM invitations WHERE token_hash=? AND expires_at>? AND uses<max_uses').bind(hash,new Date().toISOString()).first();
     if(!invite)throw new HttpError(400,'Einladung ungültig oder abgelaufen.');
+    if(invite.recipient_email&&invite.recipient_email!==user.email)throw new HttpError(403,'Bitte mit der eingeladenen E-Mail-Adresse anmelden.');
     const existing=await env.DB.prepare('SELECT role FROM memberships WHERE group_id=? AND user_id=?').bind(invite.group_id,user.id).first();
-    if(existing)return json({id:invite.group_id});
-    await env.DB.batch([
-      env.DB.prepare('INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,?)').bind(invite.group_id,user.id,invite.role),
-      env.DB.prepare('UPDATE invitations SET uses=uses+1 WHERE token_hash=?').bind(hash)
-    ]);return json({id:invite.group_id});
+    if(existing){
+      if(invite.recipient_email){try{
+        const changed=await env.DB.prepare('UPDATE invitations SET uses=uses+1,accepted_at=?,accepted_by=? WHERE token_hash=?').bind(new Date().toISOString(),user.id,hash).run();
+        if(!changed.meta.changes)throw new Error('Invitation changed');
+      }catch{throw new HttpError(409,'Einladung wurde inzwischen angenommen oder geändert. Bitte aktualisieren.');}}
+      return json({id:invite.group_id});
+    }
+    try{const joined=await env.DB.batch([
+      env.DB.prepare(`INSERT INTO memberships(group_id,user_id,role) SELECT group_id,?,role FROM invitations WHERE token_hash=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND uses<max_uses AND (recipient_email IS NULL OR recipient_email=?)`).bind(user.id,hash,user.email),
+      env.DB.prepare('UPDATE invitations SET uses=uses+1,accepted_at=CASE WHEN recipient_email IS NOT NULL THEN ? ELSE accepted_at END,accepted_by=CASE WHEN recipient_email IS NOT NULL THEN ? ELSE accepted_by END WHERE token_hash=?').bind(new Date().toISOString(),user.id,hash)
+    ]);if(!joined[0].meta.changes)throw new Error('Invitation changed');
+    }catch{throw new HttpError(409,'Einladung wurde inzwischen angenommen oder geändert. Bitte aktualisieren.');}
+    return json({id:invite.group_id});
   }
   let groupRoute=routeMatch(path,'/api/groups/:groupId');
   if(groupRoute&&['PATCH','DELETE'].includes(method)) {
@@ -285,7 +305,18 @@ async function api(request,env) {
     ]);
     return json({ok:true});
   }
-  let route=routeMatch(path,'/api/groups/:groupId/events');
+  let route=routeMatch(path,'/api/groups/:groupId/email-invites');
+  if(route&&['GET','POST'].includes(method)){
+    const groupId=pickId(route.groupId);await requireTrainer(env,user.id,groupId);
+    if(method==='GET')return json({invitations:await listEmailInvitations(env,groupId)});
+    return json(await sendEmailInvitations({request,env,user,groupId,data:await params(request),rateLimit}));
+  }
+  route=routeMatch(path,'/api/groups/:groupId/email-invites/:inviteId/resend');
+  if(route&&method==='POST'){
+    const groupId=pickId(route.groupId);await requireTrainer(env,user.id,groupId);
+    return json(await sendEmailInvitations({request,env,user,groupId,inviteId:pickId(route.inviteId),data:await params(request),rateLimit}));
+  }
+  route=routeMatch(path,'/api/groups/:groupId/events');
   if(route) {
     const gid=pickId(route.groupId);const role=await membership(env,user.id,gid);
     if(method==='GET')return json({events:await listEvents(env,gid,user.id,role)});
@@ -375,7 +406,7 @@ export default {
     await env.DB.batch([
       env.DB.prepare('DELETE FROM sessions WHERE expires_at<=?').bind(now),
       env.DB.prepare('DELETE FROM password_resets WHERE expires_at<=?').bind(now),
-      env.DB.prepare('DELETE FROM invitations WHERE expires_at<=?').bind(now),
+      env.DB.prepare('DELETE FROM invitations WHERE (recipient_email IS NULL AND expires_at<=?) OR (recipient_email IS NOT NULL AND expires_at<=?)').bind(now,new Date(Date.now()-30*86400000).toISOString()),
       env.DB.prepare('DELETE FROM request_limits WHERE expires_at<=?').bind(Date.now()),
       env.DB.prepare('DELETE FROM login_attempts WHERE first_at<? AND (blocked_until IS NULL OR blocked_until<?)').bind(new Date(Date.now()-86400000).toISOString(),now)
     ]);
