@@ -1,12 +1,22 @@
 # TeamZeit – technischer Freigabestand, 16. November 2026
 
-Die geprüften Kernfunktionen sind für die Kurs- und Portfolio-Nutzung veröffentlicht.
+Die geprüften Kernfunktionen und die erste regionale Ausbaustufe sind veröffentlicht. **Keine Freigabe als nachweislich für 1.000 gleichzeitig aktive Produktionsnutzer geeignete Plattform:** NFR-PERF-001 bleibt offen, weil die lokalen Antwortzeiten die Ziele verfehlen und eine Cloudflare-Staging-Abnahme noch fehlt.
 
 - App und öffentliche Demo: https://teamzeit.yousef-alhabod.de
 - Quellcode: https://github.com/YousefAlhabod/teamzeit-fullstack
 - Portfolio: https://yousef-alhabod.de/#teamzeit
-- Produktionsversion: 410d4993-2e58-4378-9fc1-031403519195
-- Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; vier Migrationen angewendet.
+- Produktionsversion: 0e8ef469-770d-422d-bf84-50125e55a411
+- Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; fünf Migrationen angewendet.
+
+## Regionale Ausbaustufe
+
+- Additive Datenstruktur für Standorte, Standortverantwortliche, Plattformadministratoren und Trainingsserien. Bestehende Gruppen zunächst beim Platzhalterstandort. Das bereits vorhandene persönliche Betreiberkonto ist Plattformadministrator; keine neuen produktiven Benutzerkonten erzeugt.
+- Mehrere Trainer je Gruppe, bis zu 26 wöchentliche Termine mit stabiler Berliner Ortszeit, einzelne Termine bearbeiten/absagen, Kapazitätslimit und atomare Warteliste mit Nachrücken. Standort- und Datumsfilter sowie begrenzte Terminseiten. Neue regionale Gruppen werden von der zuständigen Verwaltung angelegt.
+- Geschützte Projektseite `/projekt`, einschließlich Scrum-Rollen und Backlog-Anforderung; Mitgliedschaft allein gibt keinen Projektzugriff. Projekt-Reviewer erhalten keine operativen Sportrechte. Keine zusätzliche Scrum-Verwaltungsanwendung implementiert.
+- Freiwillige Trainingsbenachrichtigungen mit persistenter, begrenzter Resend-Outbox; Datenexport enthält neue Rollen-, Standort-, Buchungs- und Benachrichtigungsdaten. Bestehende Einladung und Wiederherstellung bleiben erhalten.
+- 30 automatische Regressionstests erfolgreich. Lokale Browserprüfung bei 390 und 1280 Pixeln: Serienanlage über Sommerzeitwechsel, Wartestatus, Nachrücken nach Absage, Datumsfilter, Rollenanzeige und Projektseite. Kein physischer Smartphone-Test.
+- Produktionsprüfung mit isolierten Standorten und unabhängigen Sitzungen: Standortisolation, Rollen, Serie/Zeitumstellung, Filter, Registrierung, Buchung, Warteliste, Nachrücken, Export und Projektzugriff erfolgreich. Separater D1-Export vor Migration; Fingerprint-Vergleich bestätigte unveränderte bestehende Konten, Gruppen, Mitgliedschaften, Einladungen, Termine und Antworten.
+- Verbindliche Performance-Anforderung und Akzeptanzkriterien: [Product Backlog](PRODUCT_BACKLOG.md). Vollständiger lokaler Lauf mit 1.000 echten Logins, 8.000 relevanten Anfragen und 1.000 zusätzlichen Rechteprüfungen: 0 unerwartete Fehler und keine beobachtete Überbuchung; p95 Anmeldung 235.595 ms, Abfrage 5.495 ms, Buchung 6.937 ms, Absage 6.684 ms. Details und klare Grenzen: [Performance-Bericht](PERFORMANCE.md).
 
 ## Erweiterung: persönliche E-Mail-Einladungen
 
