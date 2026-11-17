@@ -3,6 +3,7 @@ import {pbkdf2,scrypt} from 'node:crypto';
 import {listEmailInvitations,sendEmailInvitations} from './email-invites.js';
 import {groupRole,groupsForUser,isAdmin,manageLocation,locationData,defaultLocation,createTraining,eventInput,bookTraining,promotion,enqueueEventChange,flushNotifications} from './platform.js';
 import {projectPage} from './project-page.js';
+import {verificationMail,scrumApi} from './community.js';
 
 const enc = new TextEncoder();
 const pbkdf2Iterations = 210000;
@@ -76,10 +77,10 @@ async function currentUser(request, env) {
   const token=cookie(request);
   if(!/^[0-9a-f]{64}$/.test(token)) return null;
   const digest=await hashToken(token);
-  const row=await env.DB.prepare('SELECT u.id,u.name,u.email FROM sessions s JOIN users u ON s.user_id=u.id WHERE s.token_hash=? AND s.expires_at > ?').bind(digest,new Date().toISOString()).first();
+  const row=await env.DB.prepare('SELECT u.id,u.name,u.email,u.email_verified_at,u.verification_required FROM sessions s JOIN users u ON s.user_id=u.id WHERE s.token_hash=? AND s.expires_at > ?').bind(digest,new Date().toISOString()).first();
   return row||null;
 }
-async function requireUser(request,env){const user=await currentUser(request,env);if(!user)throw new HttpError(401,'Bitte anmelden.');return user;}
+async function requireUser(request,env,allowUnverified=false){const user=await currentUser(request,env);if(!user)throw new HttpError(401,'Bitte anmelden.');if(!allowUnverified&&user.verification_required&&!user.email_verified_at)throw new HttpError(403,'Bitte zuerst die E-Mail-Adresse bestätigen.');return user;}
 async function membership(env,userId,groupId){
   return groupRole(env,userId,groupId);
 }
@@ -136,8 +137,9 @@ function routeMatch(path,pattern){
 async function scopedSession(request,env,id,event=false){
  const token=cookie(request);if(!/^[0-9a-f]{64}$/.test(token))throw new HttpError(401,'Bitte anmelden.');
  const resource=event?'LEFT JOIN training_events e ON e.id=? LEFT JOIN groups g ON g.id=e.group_id':'LEFT JOIN groups g ON g.id=?';
- const row=await env.DB.prepare(`SELECT u.id AS user_id,g.id AS group_id,${event?'e.id AS event_id,e.start_at,':''}m.user_id IS NOT NULL AS is_member,CASE WHEN a.user_id IS NOT NULL OR lm.user_id IS NOT NULL THEN 'trainer' ELSE m.role END AS role FROM sessions s JOIN users u ON u.id=s.user_id ${resource} LEFT JOIN memberships m ON m.group_id=g.id AND m.user_id=u.id LEFT JOIN platform_admins a ON a.user_id=u.id LEFT JOIN location_managers lm ON lm.location_id=g.location_id AND lm.user_id=u.id WHERE s.token_hash=? AND s.expires_at>?`).bind(id,await hashToken(token),new Date().toISOString()).first();
+ const row=await env.DB.prepare(`SELECT u.id AS user_id,u.verification_required,u.email_verified_at,g.id AS group_id,${event?'e.id AS event_id,e.start_at,':''}m.user_id IS NOT NULL AS is_member,CASE WHEN a.user_id IS NOT NULL OR lm.user_id IS NOT NULL THEN 'trainer' ELSE m.role END AS role FROM sessions s JOIN users u ON u.id=s.user_id ${resource} LEFT JOIN memberships m ON m.group_id=g.id AND m.user_id=u.id LEFT JOIN platform_admins a ON a.user_id=u.id LEFT JOIN location_managers lm ON lm.location_id=g.location_id AND lm.user_id=u.id WHERE s.token_hash=? AND s.expires_at>?`).bind(id,await hashToken(token),new Date().toISOString()).first();
  if(!row)throw new HttpError(401,'Bitte anmelden.');
+ if(row.verification_required&&!row.email_verified_at)throw new HttpError(403,'Bitte zuerst die E-Mail-Adresse bestätigen.');
  pickId(id);
  if(event&&!row.event_id)throw new HttpError(404,'Termin nicht gefunden.');
  if(!row.group_id||!row.role)throw new HttpError(403,'Keine Berechtigung für diese Gruppe.');return row;
@@ -174,7 +176,8 @@ async function api(request,env) {
       env.DB.prepare('INSERT INTO setup_lock(id) VALUES(1)'),
       env.DB.prepare('INSERT INTO users(id,name,email,password_hash,password_salt) VALUES(?,?,?,?,?)').bind(uid,name,email,digest,salt),
       env.DB.prepare('INSERT INTO groups(id,name,description,created_by) VALUES(?,?,?,?)').bind(gid,groupName,'Trainingsorganisation für eine Freizeitsportgruppe',uid),
-      env.DB.prepare('INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,?)').bind(gid,uid,'trainer')
+      env.DB.prepare('INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,?)').bind(gid,uid,'trainer'),
+      env.DB.prepare("INSERT INTO scrum_members(project_id,user_id,role) VALUES('00000000-0000-4000-8000-000000000002',?,'project_admin')").bind(uid)
     ]);
     return issueSession(env,{id:uid,name,email},request);
   }
@@ -188,7 +191,15 @@ async function api(request,env) {
     const data=await params(request);
     if(data.privacyAccepted!==true)throw new HttpError(400,'Bitte die Datenschutzhinweise bestätigen.');
     const name=textField(data.name,'Name',MAX_TEXT.name),email=validEmail(data.email),password=validPassword(data.password);
+    if(!env.RESEND_API_KEY||!env.MAIL_FROM||!env.APP_ORIGIN)throw new HttpError(503,'E-Mail-Verifizierung ist derzeit nicht verfügbar.');
+    await rateLimit(env,`register-email:${email}`,3,3600);
     const raw=String(data.inviteCode||'').replaceAll('-','').trim().toLowerCase();
+    if(!raw){
+      const uid=crypto.randomUUID(),salt=randomToken(16),digest=await hashPassword(password,salt);
+      try{await env.DB.prepare('INSERT INTO users(id,name,email,password_hash,password_salt,verification_required) VALUES(?,?,?,?,?,1)').bind(uid,name,email,digest,salt).run();}catch{throw new HttpError(409,'Registrierung nicht möglich; E-Mail eventuell bereits verwendet.');}
+      const user={id:uid,name,email,verification_required:1};const sent=await verificationMail(env,user,hashToken,randomToken);
+      const response=await issueSession(env,user,request);const body=await response.json();return json({...body,verificationSent:sent},200,{'set-cookie':response.headers.get('set-cookie')});
+    }
     if(!/^[0-9a-f]{32}$/.test(raw))throw new HttpError(400,'Ungültiger Einladungscode.');
     const hash=await hashToken(raw),now=new Date().toISOString();
     const invite=await env.DB.prepare('SELECT * FROM invitations WHERE token_hash=? AND expires_at>? AND uses<max_uses').bind(hash,now).first();
@@ -196,11 +207,23 @@ async function api(request,env) {
     if(invite.recipient_email&&invite.recipient_email!==email)throw new HttpError(403,'Diese persönliche Einladung gilt für eine andere E-Mail-Adresse.');
     const uid=crypto.randomUUID(),salt=randomToken(16),digest=await hashPassword(password,salt);
     try {await env.DB.batch([
-      env.DB.prepare(`INSERT INTO users(id,name,email,password_hash,password_salt) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM invitations WHERE token_hash=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND uses<max_uses AND (recipient_email IS NULL OR recipient_email=?))`).bind(uid,name,email,digest,salt,hash,email),
+      env.DB.prepare(`INSERT INTO users(id,name,email,password_hash,password_salt,verification_required) SELECT ?,?,?,?,?,1 WHERE EXISTS(SELECT 1 FROM invitations WHERE token_hash=? AND expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now') AND uses<max_uses AND (recipient_email IS NULL OR recipient_email=?))`).bind(uid,name,email,digest,salt,hash,email),
       env.DB.prepare('INSERT INTO memberships(group_id,user_id,role) VALUES(?,?,?)').bind(invite.group_id,uid,invite.role),
       env.DB.prepare('UPDATE invitations SET uses=uses+1,accepted_at=CASE WHEN recipient_email IS NOT NULL THEN ? ELSE accepted_at END,accepted_by=CASE WHEN recipient_email IS NOT NULL THEN ? ELSE accepted_by END WHERE token_hash=?').bind(now,uid,hash)
     ]);} catch {throw new HttpError(409,'Registrierung nicht möglich; E-Mail eventuell bereits verwendet.');}
-    return issueSession(env,{id:uid,name,email},request);
+    const account={id:uid,name,email,verification_required:1},sent=await verificationMail(env,account,hashToken,randomToken);
+    const response=await issueSession(env,account,request);return json({...await response.json(),verificationSent:sent},200,{'set-cookie':response.headers.get('set-cookie')});
+  }
+  if(method==='POST'&&path==='/api/auth/verify-email'){
+    await rateLimit(env,`verify:${request.headers.get('cf-connecting-ip')||'local'}`,30,900);
+    const d=await params(request);if(typeof d.token!=='string'||!/^[a-f0-9]{64}$/.test(d.token))throw new HttpError(400,'Ungültiger Bestätigungslink.');
+    const hash=await hashToken(d.token),now=new Date().toISOString();
+    const results=await env.DB.batch([env.DB.prepare('UPDATE users SET email_verified_at=? WHERE id=(SELECT user_id FROM email_verifications WHERE token_hash=? AND expires_at>?) RETURNING id').bind(now,hash,now),env.DB.prepare('DELETE FROM email_verifications WHERE token_hash=?').bind(hash)]);
+    if(!results[0].results.length)throw new HttpError(400,'Bestätigungslink ungültig, abgelaufen oder bereits verwendet.');return json({ok:true});
+  }
+  if(method==='POST'&&path==='/api/auth/resend-verification'){
+    const account=await requireUser(request,env,true);if(account.email_verified_at)return json({ok:true,alreadyVerified:true});await rateLimit(env,`verify-resend:${account.id}`,3,3600);
+    return json({ok:true,verificationSent:await verificationMail(env,account,hashToken,randomToken)});
   }
   if(method==='POST'&&path==='/api/auth/forgot-password') {
     if(!env.RESEND_API_KEY || !env.MAIL_FROM || !env.APP_ORIGIN)throw new HttpError(503,'Passwort-Wiederherstellung ist noch nicht eingerichtet. Bitte den Betreiber kontaktieren.');
@@ -241,12 +264,14 @@ async function api(request,env) {
     return json({ok:true},200,{'set-cookie':cookieAttrs(request,true)});
   }
   if(method==='GET'&&path==='/api/me') {
-    const user=await requireUser(request,env);
+    const user=await requireUser(request,env,true);
+    if(user.verification_required&&!user.email_verified_at)return json({user:publicUser(user),groups:[],locations:[],admin:false});
     const groups=await groupsForUser(env,user.id),locations=await locationData(env,user.id);
     return json({user:publicUser(user),groups,...locations});
   }
   if(method==='DELETE'&&path==='/api/me') {
-    const user=await requireUser(request,env);
+    const user=await requireUser(request,env,true);
+    if(await env.DB.prepare("SELECT 1 FROM scrum_members WHERE user_id=? AND role='project_admin' AND NOT EXISTS(SELECT 1 FROM scrum_members other WHERE other.project_id=scrum_members.project_id AND other.role='project_admin' AND other.user_id<>?)").bind(user.id,user.id).first())throw new HttpError(409,'Zuerst eine weitere Projektadministration festlegen.');
     if(await isAdmin(env,user.id))throw new HttpError(409,'Plattformadministration vor Kontolöschung an ein anderes Konto übertragen.');
     const trainerGroups=await env.DB.prepare("SELECT COUNT(*) AS n FROM memberships m WHERE m.user_id=? AND m.role='trainer' AND NOT EXISTS(SELECT 1 FROM memberships m2 WHERE m2.group_id=m.group_id AND m2.user_id<>m.user_id AND m2.role='trainer')").bind(user.id).first();
     if(trainerGroups.n)throw new HttpError(409,'Zuerst eine weitere Trainerperson festlegen oder die Gruppe löschen.');
@@ -271,6 +296,12 @@ async function api(request,env) {
     return json({ok:true,...await bookTraining(env,scope.user_id,eid,data.status===null?null:validStatus(data.status),scope)});
   }
   const user=await requireUser(request,env);
+  if(path.startsWith('/api/scrum/')){const result=await scrumApi({env,user,path,method,data:()=>params(request),id:pickId,json});if(result)return result;}
+  const leave=routeMatch(path,'/api/groups/:groupId/leave');
+  if(leave&&method==='POST'){
+    const gid=pickId(leave.groupId);if(!await env.DB.prepare('SELECT 1 FROM memberships WHERE group_id=? AND user_id=?').bind(gid,user.id).first())throw new HttpError(403,'Keine Gruppenmitgliedschaft.');
+    try{await env.DB.batch([env.DB.prepare('DELETE FROM responses WHERE user_id=? AND event_id IN (SELECT id FROM training_events WHERE group_id=?)').bind(user.id,gid),env.DB.prepare('DELETE FROM memberships WHERE group_id=? AND user_id=?').bind(gid,user.id)]);}catch{throw new HttpError(409,'Letzte Trainerperson: zuerst weitere Trainerperson festlegen.');}return json({ok:true});
+  }
   if(path==='/api/locations'&&method==='GET')return json(await locationData(env,user.id));
   if(path==='/api/locations'&&method==='POST'){
     if(!await isAdmin(env,user.id))throw new HttpError(403,'Nur Plattformadministration.');
@@ -304,7 +335,9 @@ async function api(request,env) {
     const responses=await env.DB.prepare('SELECT e.title,e.start_at,r.status,r.booking_state,r.queued_at,r.updated_at FROM responses r JOIN training_events e ON e.id=r.event_id WHERE r.user_id=?').bind(user.id).all();
     const settings=await env.DB.prepare('SELECT training_notifications FROM users WHERE id=?').bind(user.id).first();
     const managed=await env.DB.prepare('SELECT l.name,l.city FROM location_managers m JOIN locations l ON l.id=m.location_id WHERE m.user_id=?').bind(user.id).all();
-    return json({user:publicUser(user),groups:groups.results,responses:responses.results,trainingNotifications:!!settings.training_notifications,access:{platformAdmin:await isAdmin(env,user.id),managedLocations:managed.results,projectReviewer:!!await env.DB.prepare('SELECT user_id FROM project_access WHERE user_id=?').bind(user.id).first()}});
+    const scrumProjects=await env.DB.prepare('SELECT p.name,m.role FROM scrum_members m JOIN scrum_projects p ON p.id=m.project_id WHERE m.user_id=?').bind(user.id).all();
+    const assignedScrumTasks=await env.DB.prepare('SELECT title,description,status,created_at,updated_at FROM scrum_tasks WHERE assignee_id=?').bind(user.id).all();
+    return json({user:publicUser(user),groups:groups.results,responses:responses.results,scrumProjects:scrumProjects.results,assignedScrumTasks:assignedScrumTasks.results,trainingNotifications:!!settings.training_notifications,access:{platformAdmin:await isAdmin(env,user.id),managedLocations:managed.results,projectReviewer:!!await env.DB.prepare('SELECT user_id FROM project_access WHERE user_id=?').bind(user.id).first()}});
   }
   if(path==='/api/groups'&&method==='POST') {
     const data=await params(request),id=crypto.randomUUID();
@@ -435,7 +468,8 @@ export default {
     if(path==='/projekt'||path==='/projekt/'){
       const user=await currentUser(request,env);
       if(!user)return json({error:'Bitte für die geschützten Projektinformationen anmelden.'},401);
-      const access=await env.DB.prepare(`SELECT 1 AS ok WHERE EXISTS(SELECT 1 FROM platform_admins WHERE user_id=?) OR EXISTS(SELECT 1 FROM location_managers WHERE user_id=?) OR EXISTS(SELECT 1 FROM memberships WHERE user_id=? AND role='trainer') OR EXISTS(SELECT 1 FROM project_access WHERE user_id=?)`).bind(user.id,user.id,user.id,user.id).first();
+      if(user.verification_required&&!user.email_verified_at)return json({error:'Bitte zuerst die E-Mail-Adresse bestätigen.'},403);
+      const access=await env.DB.prepare('SELECT 1 WHERE EXISTS(SELECT 1 FROM scrum_members WHERE user_id=?) OR EXISTS(SELECT 1 FROM project_access WHERE user_id=?)').bind(user.id,user.id).first();
       if(!access)return json({error:'Keine Freigabe für Projektinformationen.'},403);
       return new Response(projectPage,{headers:{...baseHeaders,'content-type':'text/html; charset=utf-8','content-security-policy':"default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"}});
     }
@@ -464,6 +498,7 @@ export default {
     await env.DB.batch([
       env.DB.prepare('DELETE FROM sessions WHERE expires_at<=?').bind(now),
       env.DB.prepare('DELETE FROM password_resets WHERE expires_at<=?').bind(now),
+      env.DB.prepare('DELETE FROM email_verifications WHERE expires_at<=?').bind(now),
       env.DB.prepare('DELETE FROM invitations WHERE (recipient_email IS NULL AND expires_at<=?) OR (recipient_email IS NOT NULL AND expires_at<=?)').bind(now,new Date(Date.now()-30*86400000).toISOString()),
       env.DB.prepare('DELETE FROM request_limits WHERE expires_at<=?').bind(Date.now()),
       env.DB.prepare("DELETE FROM notification_outbox WHERE created_at<datetime('now','-30 days') OR (status='sent' AND created_at<datetime('now','-7 days'))"),

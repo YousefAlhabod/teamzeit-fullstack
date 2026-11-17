@@ -15,7 +15,7 @@
     "test:staging:login": "node scripts/staging-load.mjs --users=1000 --duration=120 --ramp=60 --label=login",
     "test:staging:api": "node scripts/staging-load.mjs --users=1000 --duration=120 --auth=seeded --label=api",
     "perf:hash": "node scripts/diagnose-hash.mjs",
-    "check": "node --check src/worker.js && node --check src/core.js && node --check src/email-invites.js && node --check src/platform.js && node --check src/project-page.js && node --check scripts/load-test.mjs && node --check public/app.js && node --check public/time.js && node --test tests/*.test.mjs"
+    "check": "node --check src/worker.js && node --check src/core.js && node --check src/email-invites.js && node --check src/platform.js && node --check src/project-page.js && node --check src/community.js && node --check scripts/load-test.mjs && node --check public/app.js && node --check public/scrum.js && node --check public/time.js && node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "miniflare": "5.20261116.0-beta",

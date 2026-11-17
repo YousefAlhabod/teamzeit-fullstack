@@ -12,8 +12,9 @@ test('recipient parsing validates the entire batch and removes duplicates',()=>{
 });
 
 test('personal email invitations: real Worker/D1 and intercepted Resend batch',async t=>{
- const batches=[];let fail=false;
- const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/email-invites.js'},{type:'ESModule',path:'src/platform.js'},{type:'ESModule',path:'src/project-page.js'},{type:'ESModule',path:'public/time.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789',RESEND_API_KEY:'mock-only-no-real-mail',MAIL_FROM:'TeamZeit <mail@example.invalid>',APP_ORIGIN:'https://teamzeit.example.invalid'},outboundService:async request=>{
+ const batches=[],verificationMails=new Map();let fail=false;
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/community.js'},{type:'ESModule',path:'src/email-invites.js'},{type:'ESModule',path:'src/platform.js'},{type:'ESModule',path:'src/project-page.js'},{type:'ESModule',path:'public/time.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789',RESEND_API_KEY:'mock-only-no-real-mail',MAIL_FROM:'TeamZeit <mail@example.invalid>',APP_ORIGIN:'https://teamzeit.example.invalid'},outboundService:async request=>{
+  if(request.url==='https://api.resend.com/emails'){const mail=await request.json();verificationMails.set(mail.to[0],mail.text.match(/#verify=([a-f0-9]{64})/)[1]);return Response.json({id:'mock-verification'});}
   assert.equal(request.url,'https://api.resend.com/emails/batch');
   const payload=await request.json();assert.match(request.headers.get('Idempotency-Key'),/^teamzeit-invites-/);batches.push(payload);
   return fail?Response.json({message:'Provider unavailable'},{status:429}):Response.json({data:payload.map(()=>({id:crypto.randomUUID()}))});
@@ -28,7 +29,7 @@ test('personal email invitations: real Worker/D1 and intercepted Resend batch',a
   async function req(client,path,method='GET',body,status=200){
    const res=await mf.dispatchFetch('http://localhost/api'+path,{method,headers:{...(client.cookie?{cookie:client.cookie}:{}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
    const data=await res.json();assert.equal(res.status,status,`${path}: ${JSON.stringify(data)}`);
-   if(res.headers.has('set-cookie'))client.cookie=res.headers.get('set-cookie').split(';')[0];return data;
+   if(res.headers.has('set-cookie'))client.cookie=res.headers.get('set-cookie').split(';')[0];if(path==='/auth/register'&&res.status===200){await req(client,'/auth/verify-email','POST',{token:verificationMails.get(body.email.toLowerCase())});}return data;
   }
   const trainer={},a={},b={},password='Only-Test-Password!2026';
   await req(trainer,'/setup','POST',{setupToken:'test-only-setup-token-123456789',name:'Trainer <Test>',email:'trainer@example.invalid',password,groupName:'Die wilden Waden'});

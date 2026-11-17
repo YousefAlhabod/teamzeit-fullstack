@@ -2,7 +2,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 import {scryptSync,randomBytes,createHash,randomUUID} from 'node:crypto';
 export async function fixture(options={}){
- const mf=new Miniflare(convertV4MiniflareOptions({modules:[...['worker','core','email-invites','platform','project-page'].map(n=>({type:'ESModule',path:`src/${n}.js`})),{type:'ESModule',path:'public/time.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{REGISTRATION_ENABLED:'true',RATE_LIMIT_SECRET:'isolated-tests-only',...options.bindings},...options}));
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:[...['worker','core','community','email-invites','platform','project-page'].map(n=>({type:'ESModule',path:`src/${n}.js`})),{type:'ESModule',path:'public/time.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{REGISTRATION_ENABLED:'true',RATE_LIMIT_SECRET:'isolated-tests-only',...options.bindings},...options}));
  const db=await mf.getD1Database('DB');
  for(const name of readdirSync('migrations').sort()){
   const sql=readFileSync(`migrations/${name}`,'utf8').replace(/--[^\n]*/g,'');
