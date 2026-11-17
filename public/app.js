@@ -1,5 +1,5 @@
 import {berlinToUtc} from './time.js';
-import {scrumBoard} from './scrum.js';
+import {scrumBoard} from './scrum.js?v=member-filter-1';
 const root=document.getElementById('app-root');
 const modal=document.getElementById('modal');
 const modalContent=document.getElementById('modal-content');

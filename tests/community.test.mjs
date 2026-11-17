@@ -41,12 +41,14 @@ test('open registration, verified email, independent Scrum roles and real task w
    await req(admin,`/scrum/projects/${pid}/members`,'POST',{email:admin.email,role:'product_owner'},409);await req(admin,`/scrum/projects/${pid}/members/${admin.id}`,'DELETE',{},409);
   });
   await t.test('tasks are assigned, progressed and protected against stale edits and unauthorized changes',async()=>{
+   await req(admin,`/scrum/projects/${pid}/tasks`,'POST',{title:'Keine Person',description:'Beschreibung'},400);
+   await req(admin,`/scrum/projects/${pid}/tasks`,'POST',{title:'Keine Beschreibung',assigneeId:guestId},400);
    task=await req(admin,`/scrum/projects/${pid}/tasks`,'POST',{title:'Echte Aufgabe',description:'Test <script>literal</script>',assigneeId:guestId},201);
    await req(guest,`/scrum/projects/${pid}/tasks/${task.id}`,'PATCH',{status:'in_progress',version:1});
    await req(admin,`/scrum/projects/${pid}/tasks/${task.id}`,'PATCH',{title:'Stale overwrite',version:1},409);
    await req(guest,`/scrum/projects/${pid}/tasks/${task.id}`,'PATCH',{title:'Unauthorized title',version:2},403);
    await req(stakeholder,`/scrum/projects/${pid}/tasks`,'POST',{title:'Forbidden'},403);await req(stakeholder,`/scrum/projects/${pid}/tasks/${task.id}`,'PATCH',{status:'done',version:2},403);
-   for(const person of [po,sm])await req(person,`/scrum/projects/${pid}/tasks`,'POST',{title:'Planbare Aufgabe'},201);
+   for(const person of [po,sm])await req(person,`/scrum/projects/${pid}/tasks`,'POST',{title:'Planbare Aufgabe',description:'Projektplanung',assigneeId:person.id},201);
    await req(admin,`/scrum/projects/${pid}/tasks`,'POST',{title:'Foreign assignee',assigneeId:sportAdmin.id},400);
    await req(guest,`/scrum/projects/${pid}/tasks/${task.id}`,'PATCH',{status:'review',version:2});
    await req(admin,`/scrum/projects/${pid}/tasks/${task.id}`,'PATCH',{status:'done',version:3});
