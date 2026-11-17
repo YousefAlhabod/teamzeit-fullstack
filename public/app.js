@@ -91,10 +91,14 @@ async function renderAuth(){
     <div class="auth-toggle">${isLogin?'<button class="link-button" data-action="auth-forgot">Passwort vergessen?</button>':''}${!isSetup?`<button class="link-button" data-action="auth-${isLogin?'register':'login'}">${isLogin?'Neues Konto registrieren':'Bereits registriert? Anmelden'}</button>`:''}<button class="link-button" data-action="start-demo">Ohne Anmeldung testen</button></div></div>`;
 }
 async function loadLive(){
- const me=await call('/me');state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.locations=me.locations;state.group=me.groups.find(g=>g.id===state.group?.id)||me.groups[0]||null;state.mode='live';state.panel='events';state.invite=null;state.emailInvitations=[];
+ const me=await call('/me');state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.userDirectory=me.userDirectory===true;state.locations=me.locations;state.group=me.groups.find(g=>g.id===state.group?.id)||me.groups[0]||null;state.mode='live';state.panel='events';state.invite=null;state.emailInvitations=[];
  if(state.group){const events=await call(`/groups/${state.group.id}/events`);state.events=events.events}else state.events=[];
  renderApp();scrollApp();
  if(requestedBoard&&!state.user.verificationRequired){requestedBoard=false;openBoard();}
+}
+async function showUserDirectory(after=""){
+ const d=await call("/admin/users"+(after?"?after="+encodeURIComponent(after):""));
+ openDialog(`<h3>Benutzerübersicht</h3><p>Alle registrierten Konten. Stand beim Öffnen; jeweils bis zu 100 Benutzer.</p><div style="overflow:auto"><table class="participant-table"><thead><tr><th>Name</th><th>E-Mail-Adresse</th><th>Registrierungsstatus</th></tr></thead><tbody>${d.users.map(u=>`<tr><td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.email)}</td><td>${escapeHtml(u.status)}</td></tr>`).join("")}</tbody></table></div><button class="link-button" data-action="user-directory">Aktualisieren / erste Seite</button>${d.next?`<button class="btn btn-secondary" data-action="user-directory" data-after="${escapeHtml(d.next)}">Weitere Benutzer</button>`:""}`);
 }
 function openBoard(){if(state.mode!=='live'){requestedBoard=true;return showAuth('login');}if(state.user.verificationRequired)return renderApp();state.panel='scrum';scrollApp();return scrumBoard({root,call,notify,user:state.user,onBack:()=>{state.panel='events';renderApp();}});}
 async function verifyEmail(){try{await call('/auth/verify-email','POST',{token:verifyToken});verifyToken='';notify('E-Mail-Adresse bestätigt.');try{await loadLive();}catch{await showAuth('login');notify('E-Mail bestätigt. Bitte anmelden.');}}catch(error){root.innerHTML=`<div class="auth-pane"><h3>Bestätigungslink nicht verfügbar</h3><p>${escapeHtml(error.message)}</p><button data-action="open-login" class="btn btn-primary">Anmelden und neuen Link anfordern</button></div>`;scrollApp();}}
@@ -116,7 +120,7 @@ function showLocationManagement(){
 }
 function platformTools(){
  if(state.mode!=='live')return '';
- return `<div class="training-filters"><label>Standort<select id="location-filter"><option value="">Alle meine Standorte</option>${state.locations.map(l=>`<option value="${escapeHtml(l.id)}" ${state.locationFilter===l.id?'selected':''}>${escapeHtml(l.name)}${l.city?' · '+escapeHtml(l.city):''}</option>`).join('')}</select></label>${state.admin||state.locations.some(l=>l.canManage)?'<button class="btn btn-secondary" data-action="manage-locations">Standorte & Zuständigkeiten</button>':''}<a href="/projekt">Projektinformationen 🔒</a></div>${state.panel==='events'?`<form id="training-filter" class="training-filters"><label>Von<input type="date" name="from" value="${escapeHtml(state.dateFrom)}"></label><label>Bis<input type="date" name="to" value="${escapeHtml(state.dateTo)}"></label><button class="btn btn-secondary" type="submit">Termine filtern</button><button class="link-button" type="button" data-action="clear-filters">Zurücksetzen</button></form><div class="training-filters"><button class="link-button" data-action="previous-events" ${state.offset===0?'disabled':''}>Vorherige Termine</button><span>Seite ${state.offset/150+1}</span><button class="link-button" data-action="next-events" ${state.events.length<150?'disabled':''}>Weitere Termine</button></div>`:''}`;
+ return `<div class="training-filters"><label>Standort<select id="location-filter"><option value="">Alle meine Standorte</option>${state.locations.map(l=>`<option value="${escapeHtml(l.id)}" ${state.locationFilter===l.id?'selected':''}>${escapeHtml(l.name)}${l.city?' · '+escapeHtml(l.city):''}</option>`).join('')}</select></label>${state.admin||state.locations.some(l=>l.canManage)?'<button class="btn btn-secondary" data-action="manage-locations">Standorte & Zuständigkeiten</button>':''}${state.userDirectory?'<button class="btn btn-secondary" data-action="user-directory">Benutzerübersicht</button>':''}<a href="/projekt">Projektinformationen 🔒</a></div>${state.panel==='events'?`<form id="training-filter" class="training-filters"><label>Von<input type="date" name="from" value="${escapeHtml(state.dateFrom)}"></label><label>Bis<input type="date" name="to" value="${escapeHtml(state.dateTo)}"></label><button class="btn btn-secondary" type="submit">Termine filtern</button><button class="link-button" type="button" data-action="clear-filters">Zurücksetzen</button></form><div class="training-filters"><button class="link-button" data-action="previous-events" ${state.offset===0?'disabled':''}>Vorherige Termine</button><span>Seite ${state.offset/150+1}</span><button class="link-button" data-action="next-events" ${state.events.length<150?'disabled':''}>Weitere Termine</button></div>`:''}`;
 }
 const counts=ev=>state.mode==='demo'?withCounts(ev).counts:ev.counts||{yes:0,no:0,maybe:0};
 const statusName={yes:'Zusage',no:'Absage',maybe:'Vielleicht',open:'Noch offen'};
@@ -219,6 +223,7 @@ async function performAction(button){
  if(action==='auth-register')return showAuth('register');
  if(action==='auth-login')return showAuth('login');
  if(action==='auth-forgot')return showAuth('forgot');
+ if(action==='user-directory')return showUserDirectory(button.dataset.after||'');
  if(action==='open-scrum')return openBoard();
  if(action==='resend-verification'){button.disabled=true;try{const r=await call('/auth/resend-verification','POST',{});notify(r.verificationSent?'Bestätigungsmail versandt.':'Versand nicht bestätigt. Bitte später erneut versuchen.',!r.verificationSent);}finally{button.disabled=false;}return;}
  if(action==='leave-group'){if(!confirm('Diese Trainingsgruppe verlassen? Deine dortigen Teilnahmeantworten werden entfernt.'))return;await call(`/groups/${state.group.id}/leave`,'POST',{});state.group=null;return loadLive();}
@@ -325,7 +330,7 @@ document.addEventListener('submit',async ev=>{
  if(verifyToken){await verifyEmail();return;}
  if(resetToken){await showAuth('reset');return;}
  if(incomingInvite){await showAuth('register');return;}
- try{const me=await call('/me');if(me.user){state.mode='live';state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.locations=me.locations;state.group=me.groups[0]||null;state.events=await loadEvents();renderApp();if(requestedBoard&&!state.user.verificationRequired){requestedBoard=false;openBoard();}}}
+ try{const me=await call('/me');if(me.user){state.mode='live';state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.userDirectory=me.userDirectory===true;state.locations=me.locations;state.group=me.groups[0]||null;state.events=await loadEvents();renderApp();if(requestedBoard&&!state.user.verificationRequired){requestedBoard=false;openBoard();}}}
  catch{if(requestedBoard)await showAuth('login');}
 })();
 document.addEventListener('change',async event=>{

@@ -267,7 +267,7 @@ async function api(request,env) {
     const user=await requireUser(request,env,true);
     if(user.verification_required&&!user.email_verified_at)return json({user:publicUser(user),groups:[],locations:[],admin:false});
     const groups=await groupsForUser(env,user.id),locations=await locationData(env,user.id);
-    return json({user:publicUser(user),groups,...locations});
+    return json({user:publicUser(user),groups,...locations,userDirectory:locations.admin&&user.email===env.USER_DIRECTORY_ADMIN_EMAIL});
   }
   if(method==='DELETE'&&path==='/api/me') {
     const user=await requireUser(request,env,true);
@@ -296,6 +296,13 @@ async function api(request,env) {
     return json({ok:true,...await bookTraining(env,scope.user_id,eid,data.status===null?null:validStatus(data.status),scope)});
   }
   const user=await requireUser(request,env);
+  if(path==='/api/admin/users'&&method==='GET'){
+    if(user.email!==env.USER_DIRECTORY_ADMIN_EMAIL||!await isAdmin(env,user.id))throw new HttpError(403,'Nur die persönliche Administration.');
+    const after=u.searchParams.get('after')||'';
+    if(after&&!/^[a-f0-9-]{36}$/i.test(after))throw new HttpError(400,'Ungültige Seitenauswahl.');
+    const rows=(await env.DB.prepare('SELECT id,name,email,email_verified_at,verification_required FROM users WHERE id>? ORDER BY id LIMIT 101').bind(after).all()).results;
+    return json({users:rows.slice(0,100).map(row=>({name:row.name,email:row.email,status:row.email_verified_at?'E-Mail bestätigt':row.verification_required?'E-Mail-Bestätigung ausstehend':'Registriert (Bestandskonto)'})),next:rows.length>100?rows[99].id:null});
+  }
   if(path.startsWith('/api/scrum/')){const result=await scrumApi({env,user,path,method,data:()=>params(request),id:pickId,json});if(result)return result;}
   const leave=routeMatch(path,'/api/groups/:groupId/leave');
   if(leave&&method==='POST'){
