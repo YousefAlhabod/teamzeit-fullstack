@@ -44,9 +44,15 @@ Im eingerichteten Produktivbetrieb verbleiben `RATE_LIMIT_SECRET` und `RESEND_AP
 
 Die Passwort-Wiederherstellung verwendet die verifizierte Resend-Senderdomain `mail.teamzeit.yousef-alhabod.de` (Irland) und einen Sending-Access-Schlüssel. Echte Test- und Rücksetzmails wurden als Delivered bestätigt; der persönliche Reset samt neuer Anmeldung wurde abgeschlossen. Ein Link gilt 30 Minuten, nur einmal, und beendet vorhandene Sitzungen. Fehlt die Konfiguration in einer anderen Installation, meldet die App die fehlende Verfügbarkeit.
 
+## Scrum Board und offene Registrierung (17.11.2026)
+
+Unter **Scrum Board → Projektmitglieder & Rollen** nimmt die Projektadministration registrierte, freigeschaltete Benutzer per E-Mail auf und vergibt ausdrücklich Product Owner, Scrum Master, Developer oder Stakeholder. Unter **Aufgabe anlegen & zuweisen** verwalten Projektadministration, Product Owner und Scrum Master Aufgaben. Developer ändern den Status eigener Aufgaben; Stakeholder lesen mit. Die vier Spalten sind Offen, In Arbeit, Review und Erledigt. Gleichzeitige Änderungen werden über Versionsnummern geschützt.
+
+Migration 0006 erweitert die vorhandene Datenbank additiv und übernimmt bestehende Plattformadministratoren einmalig als Projektadministratoren. Sportrollen und Scrum-Rollen bleiben getrennt; neue Konten erhalten keine privilegierten Rollen. Öffentliche Registrierung benötigt keine Einladung. Neue E-Mail-Adressen müssen über einen einmaligen, gehasht gespeicherten Link (24 Stunden) bestätigt werden; erneuter Versand ist begrenzt und ersetzt den alten Link. Bestehende Konten bleiben nutzbar, werden aber nicht fälschlich als verifiziert markiert. Gruppeneinladungen bleiben nutzbar; unter Gruppe & Einladen kann die eigene Mitgliedschaft verlassen werden, sofern die letzte Trainerrolle erhalten bleibt.
+
 ## Validierung
 
-`npm run check` prüft Syntax und führt 32 Tests aus, darunter integrierte Worker/D1-Abläufe mit vier Konten, regionalen Rollen, getrennten Gruppen, persönlichen E-Mail-Einladungen, Terminserien über Zeitumstellungen, konkurrierenden Platzbuchungen und Wartelisten, Nachrücken bei Kontolöschung oder Gruppenentfernung, Benachrichtigungen, veränderten Antworten, neuen Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung und Schutz der letzten Trainerrolle. Zusätzlich geprüft: sofortiger Sitzungs-/Rechtewiderruf in den optimierten Abfragen, atomare parallele Anmeldefehler sowie privater Staging-Zugang und E-Mail-Sperre.
+`npm run check` prüft Syntax und führt 39 Tests aus, darunter integrierte Worker/D1-Abläufe mit vier Konten, regionalen Rollen, getrennten Gruppen, persönlichen E-Mail-Einladungen, Terminserien über Zeitumstellungen, konkurrierenden Platzbuchungen und Wartelisten, Nachrücken bei Kontolöschung oder Gruppenentfernung, Benachrichtigungen, veränderten Antworten, neuen Sitzungen, Passwortreset, Kontolöschung mit Referenzübertragung und Schutz der letzten Trainerrolle. Zusätzlich geprüft: sofortiger Sitzungs-/Rechtewiderruf in den optimierten Abfragen, atomare parallele Anmeldefehler sowie privater Staging-Zugang und E-Mail-Sperre.
 
 ### Standorte, Rollen und Betrieb
 

@@ -27,7 +27,7 @@ test('regional roles, capacity, FIFO waitlist and notification outbox',async t=>
    await req(trainer,`/api/groups/${foreign}/events`,'GET',undefined,403);
    await req(member,'/api/admin/access','POST',{email:member.email,role:'platform_admin',enabled:true},403);
    await req(admin,'/api/admin/access','POST',{email:admin.email,role:'platform_admin',enabled:false},409);
-   assert.equal((await request({},'/projekt')).status,401);assert.equal((await request(member,'/projekt')).status,403);assert.equal((await request(trainer,'/projekt')).status,200);
+   assert.equal((await request({},'/projekt')).status,401);assert.equal((await request(member,'/projekt')).status,403);assert.equal((await request(trainer,'/projekt')).status,403);
    await req(admin,'/api/admin/access','POST',{email:reviewer.email,role:'project_reviewer',enabled:true});
    assert.equal((await request(reviewer,'/projekt')).status,200);await req(reviewer,`/api/groups/${g}/events`,'GET',undefined,403);
    assert.ok((await req(manager,'/api/me')).groups.some(x=>x.id===g));assert.ok(!(await req(manager,'/api/me')).groups.some(x=>x.id===foreign));

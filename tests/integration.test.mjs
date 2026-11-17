@@ -4,7 +4,8 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 
 test('real Worker + isolated D1: four accounts, permissions, invitations, persistence and recovery',async()=>{
- const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/email-invites.js'},{type:'ESModule',path:'src/platform.js'},{type:'ESModule',path:'src/project-page.js'},{type:'ESModule',path:'public/time.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789'}}));
+ const verificationMails=new Map();
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'src/worker.js'},{type:'ESModule',path:'src/core.js'},{type:'ESModule',path:'src/community.js'},{type:'ESModule',path:'src/email-invites.js'},{type:'ESModule',path:'src/platform.js'},{type:'ESModule',path:'src/project-page.js'},{type:'ESModule',path:'public/time.js'}],compatibilityDate:'2026-10-01',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SETUP_TOKEN:'test-only-setup-token-123456789',RESEND_API_KEY:'mock-no-real-mail',MAIL_FROM:'TeamZeit <test@example.invalid>',APP_ORIGIN:'https://test.example.invalid'},outboundService:async request=>{const mail=await request.json();if(mail.subject.includes('bestätigen'))verificationMails.set(mail.to[0],mail.text.match(/#verify=([a-f0-9]{64})/)[1]);return Response.json({id:'mock'});}}));
  try{
   const db=await mf.getD1Database('DB');
   for(const name of readdirSync('migrations').sort()){
@@ -24,6 +25,7 @@ test('real Worker + isolated D1: four accounts, permissions, invitations, persis
    const res=await mf.dispatchFetch(`http://localhost/api${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
    const data=await res.json();assert.equal(res.status,expected,`${method} ${path}: ${JSON.stringify(data)}`);
    if(res.headers.has('set-cookie'))client.cookie=res.headers.get('set-cookie').split(';')[0];
+   if(path==='/auth/register'&&res.status===200){const verified=await mf.dispatchFetch('http://localhost/api/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:verificationMails.get(body.email.toLowerCase())})});assert.equal(verified.status,200);}
    return data;
   }
   const password='Test-only-password-2026!';
@@ -60,7 +62,7 @@ test('real Worker + isolated D1: four accounts, permissions, invitations, persis
   await req(trainer,`/groups/${gid}/members/${removed.id}`,'DELETE',{});
   await req(clients[2],`/groups/${gid}/events`,'GET',undefined,403);
   assert.equal((await req(trainer,`/events/${event.id}/participants`)).participants.length,3);
-  await req(trainer,'/auth/forgot-password','POST',{email:'trainer@example.invalid'},503);
+  await req(trainer,'/auth/forgot-password','POST',{email:'trainer@example.invalid'},200);
   // Simulate a delivered token; exercise real hashing, expiration, replay and session invalidation.
   const token='a'.repeat(64),hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
   await db.prepare('INSERT INTO password_resets(token_hash,user_id,expires_at) VALUES(?,?,?)').bind(Buffer.from(hash).toString('hex'),me.user.id,new Date(Date.now()+60000).toISOString()).run();
@@ -73,6 +75,8 @@ test('real Worker + isolated D1: four accounts, permissions, invitations, persis
   const promoted=members.find(x=>x.name==='Test Mitglied 1');
   await req(trainer,`/groups/${gid}/members/${promoted.id}`,'PATCH',{role:'trainer'});
   // Deleting an original creator must transfer references, not fail a foreign-key constraint.
+  await req(trainer,'/scrum/projects/00000000-0000-4000-8000-000000000002/members','POST',{email:'member1@example.invalid',role:'project_admin'});
+  await req(trainer,`/scrum/projects/00000000-0000-4000-8000-000000000002/members/${me.user.id}`,'DELETE',{});
   await req(trainer,'/me','DELETE',{});
   await req(secondDevice,'/auth/login','POST',{email:'member1@example.invalid',password});
   assert.equal((await req(secondDevice,'/me')).groups.find(x=>x.id===gid).role,'trainer');

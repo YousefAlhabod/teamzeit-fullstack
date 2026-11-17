@@ -1,12 +1,12 @@
-# TeamZeit – technischer Freigabestand, 16. November 2026
+# TeamZeit – technischer Freigabestand, 17. November 2026
 
 Die geprüften Kernfunktionen und die erste regionale Ausbaustufe sind veröffentlicht. **Keine Freigabe als nachweislich für 1.000 gleichzeitig aktive Produktionsnutzer geeignete Plattform:** NFR-PERF-001 bleibt offen, weil die lokalen Antwortzeiten die Ziele verfehlen und eine Cloudflare-Staging-Abnahme noch fehlt.
 
 - App und öffentliche Demo: https://teamzeit.yousef-alhabod.de
 - Quellcode: https://github.com/YousefAlhabod/teamzeit-fullstack
 - Portfolio: https://yousef-alhabod.de/#teamzeit
-- Produktionsversion: 29dd3150-3065-46a8-8913-9e9a14737125
-- Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; fünf Migrationen angewendet.
+- Produktionsversion: d6a27a77-9ad1-41c5-b144-0134ce173403
+- Eigener Worker und separate D1-Datenbank mit EU-Jurisdiktion; sechs Migrationen angewendet.
 
 ## Nachfolgende gezielte Performance-Optimierung
 
@@ -63,3 +63,11 @@ Kein Test auf einem physischen iPhone oder Android-Gerät; geprüft wurde die re
 ## Nachweise und Sicherung
 
 Lokale Prüfberichte und Browserbilder liegen in test-results, private Einrichtungsdateien in .private; beide Verzeichnisse sind von Git ausgeschlossen. Einrichtungsskripte dokumentieren den abgeschlossenen Aufbau und benötigen teilweise inzwischen ungültige private Testzugänge. Sie sind kein Bestandteil des normalen Betriebs. Das Originalprojekt wurde vor Änderungen außerhalb des Repositories gesichert; ursprüngliche lokale .wrangler-Daten wurden nicht gelöscht.
+
+## Scrum Board und Selbstregistrierung – veröffentlicht am 17.11.2026
+
+39 Tests erfolgreich. Alle vier Scrum-Rollen ausdrücklich zuweisbar; Projektadministration separat, kein automatischer Zugriff durch Sportrollen. Aufgaben erstellen, bearbeiten, zuweisen und durch vier Status bewegen; Entwickler ausschließlich eigene Statusänderungen, Stakeholder lesend, Versionskonflikte werden abgewiesen. Sichtbarer Menüpunkt Scrum Board; Rollen unter Projektmitglieder & Rollen, Aufgaben unter Aufgabe anlegen & zuweisen.
+
+Öffentliche Registrierung ohne Einladung, Mitglied als Standard, einmalige E-Mail-Bestätigung mit Ablauf und begrenztem erneutem Versand. Bestehende Konten bleiben nutzbar. Selbstständiger Gruppenaustritt mit Schutz der letzten Trainerrolle. Datenschutz und Export ergänzt.
+
+Produktionsabnahme: Registrierung einer Resend-Testadresse, Nachricht als Delivered bestätigt, echten Link eingelöst und Wiederverwendung abgewiesen. Projektadministrator hat diesen registrierten Benutzer über die Oberfläche als Developer aufgenommen und eine Aufgabe zugewiesen. Unabhängige HTTP-Sitzung hat Offen → In Arbeit → Review → Erledigt durchlaufen; Rollenselbstvergabe und veraltete Änderungen wurden blockiert. Browser bestätigte das Ergebnis. Ausschließlich synthetische Testaufgabe und Testkonto anschließend entfernt. Fingerabdrücke sämtlicher ursprünglicher Geschäftsdatensätze unverändert; Backup vor Migration vorhanden. Produktionsschlüssel unverändert. Kein neuer Lasttest und keine neue Zusage zur 1.000-Nutzer-Kapazität.

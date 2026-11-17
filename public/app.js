@@ -1,4 +1,5 @@
 import {berlinToUtc} from './time.js';
+import {scrumBoard} from './scrum.js';
 const root=document.getElementById('app-root');
 const modal=document.getElementById('modal');
 const modalContent=document.getElementById('modal-content');
@@ -7,7 +8,8 @@ const state={mode:null,user:null,group:null,groups:[],locations:[],admin:false,l
 const incoming=new URLSearchParams(location.hash.slice(1));
 let incomingInvite=incoming.get('invite')||'';
 let resetToken=incoming.get('reset')||'';
-if(incomingInvite||resetToken)history.replaceState(null,'',location.pathname+location.search);
+let verifyToken=incoming.get('verify')||'',requestedBoard=location.hash==='#scrum';
+if(incomingInvite||resetToken||verifyToken)history.replaceState(null,'',location.pathname+location.search);
 const demoKey='teamzeit-demo-v1';
 const testEvents=[
   {id:'demo-01',groupId:'demo',title:'Vereinstraining',startAt:'2026-11-18T17:30:00.000Z',location:'Sporthalle',notes:'Treffpunkt 10 Minuten früher.',myResponse:'yes',people:[{name:'Vanessa',status:'yes'},{name:'Suzana',status:'yes'},{name:'Stefan',status:'no'},{name:'Yousef',status:'yes'},{name:'Ünal',status:'maybe'}]},
@@ -67,6 +69,7 @@ async function renderAuth(){
     catch(error){root.innerHTML=`<div class="auth-pane"><h3>Einladung nicht verfügbar</h3><p>${escapeHtml(error.message)}</p><button class="btn btn-primary" data-action="auth-login-clear">Zur Anmeldung</button><button class="link-button" data-action="start-demo">Demo öffnen</button></div>`;return;}
     if(m==='register'){
       let me;try{me=await call('/me')}catch{}
+      if(me?.user?.verificationRequired){state.user=me.user;state.mode='live';renderApp();return;}
       if(me?.user&&(!state.invitePreview.email||me.user.email===state.invitePreview.email)){
         state.user=me.user;root.innerHTML=`<div class="auth-pane"><h3>Einladung zu ${escapeHtml(state.invitePreview.groupName)}</h3><p>Angemeldet als ${escapeHtml(me.user.name)} (${escapeHtml(me.user.email)}).</p><p>Mit der Annahme trittst du dieser Gruppe bei. Trainer sehen deinen Anzeigenamen und deine Teilnahmeantworten.</p><button class="btn btn-primary" data-action="accept-invite">Einladung annehmen</button><p><a href="/datenschutz.html">Datenschutzhinweise</a></p></div>`;return;
       }
@@ -76,22 +79,25 @@ async function renderAuth(){
     root.innerHTML=`<div class="auth-pane"><h3>${m==='forgot'?'Passwort vergessen?':'Neues Passwort festlegen'}</h3><form class="form-stack" id="auth-form" data-form="${m}">${m==='forgot'?'<label>E-Mail<input name="email" type="email" autocomplete="email" required></label>':'<label>Neues Passwort<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>'}<p class="inline-alert" data-form-error hidden></p><button class="btn btn-primary" type="submit">${m==='forgot'?'Link anfordern':'Passwort speichern'}</button></form><button class="link-button" data-action="auth-login">Zur Anmeldung</button></div>`;return;
   }
   const isLogin=m==='login',isRegister=m==='register',isSetup=m==='setup';
-  const title=isSetup?'Erste Gruppe einrichten':isRegister?'Mit Einladung beitreten':'Willkommen zurück';
-  const sub=isSetup?'Einmalige Einrichtung auf dem eigenen Cloudflare-Projekt.':isRegister?(state.invitePreview?`Einladung zur Gruppe ${escapeHtml(state.invitePreview.groupName)}. Nach der Registrierung bist du automatisch Mitglied.`:'Einladungscode vom Trainer benötigt.'):'Melden Sie sich mit Ihrem TeamZeit-Konto an.';
+  const title=isSetup?'Erste Gruppe einrichten':isRegister?'Kostenlos registrieren':'Willkommen zurück';
+  const sub=isSetup?'Einmalige Einrichtung auf dem eigenen Cloudflare-Projekt.':isRegister?(state.invitePreview?`Einladung zur Gruppe ${escapeHtml(state.invitePreview.groupName)}. Bitte nach Registrierung deine E-Mail-Adresse bestätigen.`:'Jeder kann ein Konto anlegen. Du startest als Mitglied ohne Scrum-Sonderrechte. Bitte bestätige anschließend deine E-Mail-Adresse.'):'Melde dich mit deinem TeamZeit-Konto an.';
   root.innerHTML=`<div class="auth-pane"><h3>${title}</h3><p>${sub}</p><form class="form-stack" id="auth-form" data-form="${m}">
     ${!isLogin?'<label>Name<input name="name" autocomplete="name" maxlength="80" required></label>':''}
     <label>E-Mail<input type="email" name="email" autocomplete="email" maxlength="254" value="${escapeHtml(incomingInvite?state.invitePreview?.email||'':'')}" ${incomingInvite&&state.invitePreview?.email?'readonly':''} required></label>
     <label>Passwort<input name="password" type="password" autocomplete="${isLogin?'current-password':'new-password'}" minlength="${isLogin?1:12}" required></label>
-    ${isRegister?`<label>Einladungscode<input name="inviteCode" value="${escapeHtml(incomingInvite)}" spellcheck="false" autocomplete="off" required></label><label class="checkbox-label"><input name="privacyAccepted" type="checkbox" required> Ich habe die <a href="/datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> gelesen. Keine Gesundheitsdaten eingeben.</label>${!registrationEnabled?'<p>Neue Konten sind derzeit noch nicht freigeschaltet. Die Demo ist sofort verfügbar.</p>':''}`:''}
+    ${isRegister?`<label>Einladungscode (optional)<input name="inviteCode" value="${escapeHtml(incomingInvite)}" spellcheck="false" autocomplete="off"></label><label class="checkbox-label"><input name="privacyAccepted" type="checkbox" required> Ich habe die <a href="/datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> gelesen. Keine Gesundheitsdaten eingeben.</label>${!registrationEnabled?'<p>Neue Konten sind derzeit noch nicht freigeschaltet. Die Demo ist sofort verfügbar.</p>':''}`:''}
     ${isSetup?'<label>Einrichtungscode (SETUP_TOKEN)<input name="setupToken" type="password" required></label><label>Name der Sportgruppe<input name="groupName" value="Die wilden Waden" required maxlength="80"></label>':''}
     <p class="inline-alert" data-form-error hidden></p><button class="btn btn-primary" type="submit">${isLogin?'Anmelden':isRegister?'Registrieren':'Gruppe einrichten'}</button></form>
-    <div class="auth-toggle">${isLogin?'<button class="link-button" data-action="auth-forgot">Passwort vergessen?</button>':''}${!isSetup?`<button class="link-button" data-action="auth-${isLogin?'register':'login'}">${isLogin?'Einladung erhalten? Registrieren':'Bereits registriert? Anmelden'}</button>`:''}<button class="link-button" data-action="start-demo">Ohne Anmeldung testen</button></div></div>`;
+    <div class="auth-toggle">${isLogin?'<button class="link-button" data-action="auth-forgot">Passwort vergessen?</button>':''}${!isSetup?`<button class="link-button" data-action="auth-${isLogin?'register':'login'}">${isLogin?'Neues Konto registrieren':'Bereits registriert? Anmelden'}</button>`:''}<button class="link-button" data-action="start-demo">Ohne Anmeldung testen</button></div></div>`;
 }
 async function loadLive(){
  const me=await call('/me');state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.locations=me.locations;state.group=me.groups.find(g=>g.id===state.group?.id)||me.groups[0]||null;state.mode='live';state.panel='events';state.invite=null;state.emailInvitations=[];
  if(state.group){const events=await call(`/groups/${state.group.id}/events`);state.events=events.events}else state.events=[];
  renderApp();scrollApp();
+ if(requestedBoard&&!state.user.verificationRequired){requestedBoard=false;openBoard();}
 }
+function openBoard(){if(state.mode!=='live'){requestedBoard=true;return showAuth('login');}if(state.user.verificationRequired)return renderApp();state.panel='scrum';scrollApp();return scrumBoard({root,call,notify,user:state.user,onBack:()=>{state.panel='events';renderApp();}});}
+async function verifyEmail(){try{await call('/auth/verify-email','POST',{token:verifyToken});verifyToken='';notify('E-Mail-Adresse bestätigt.');try{await loadLive();}catch{await showAuth('login');notify('E-Mail bestätigt. Bitte anmelden.');}}catch(error){root.innerHTML=`<div class="auth-pane"><h3>Bestätigungslink nicht verfügbar</h3><p>${escapeHtml(error.message)}</p><button data-action="open-login" class="btn btn-primary">Anmelden und neuen Link anfordern</button></div>`;scrollApp();}}
 async function loadEvents(){
  if(!state.group)return [];
  const q=new URLSearchParams({offset:String(state.offset)});
@@ -123,11 +129,12 @@ function renderEvent(ev){
 }
 function renderApp(){
  if(!state.mode){renderAuth();return}
+ if(state.mode==='live'&&state.user.verificationRequired){root.innerHTML='<div class="auth-pane"><h3>E-Mail-Adresse bestätigen</h3><p>Dein Konto ist angelegt. Öffne den Link in der Bestätigungsmail. Er gilt 24 Stunden. Bis dahin sind Gruppen und Scrum-Projekte geschützt.</p><button class="btn btn-primary" data-action="resend-verification">Bestätigungsmail erneut senden</button><button class="link-button" data-action="refresh">Bestätigung prüfen</button><button class="link-button" data-action="logout">Abmelden</button><button class="link-button" data-action="delete-account">Unbestätigtes Konto löschen</button></div>';return;}
  const trainer=isTrainer();const heading=state.panel==='settings'?'Gruppeneinstellungen':'Trainingsübersicht';
  const html=`<div class="dashboard">
- <aside class="dash-sidebar"><div class="dash-side-brand">TeamZeit<em>.</em></div><button class="dash-nav ${state.panel==='events'?'active':''}" data-action="panel-events">▦ &nbsp; Trainings</button>${trainer?`<button class="dash-nav ${state.panel==='settings'?'active':''}" data-action="panel-settings">⚙ &nbsp; Gruppe & Einladen</button>`:''}<div class="dash-tag">${state.mode==='demo'?'BEISPIELDATEN · DEMO':state.admin?'PLATTFORMADMINISTRATOR':state.locations.some(l=>l.id===state.group?.locationId&&l.canManage)?'STANDORTVERANTWORTLICH':trainer?'TRAINER':'MITGLIED'}</div><div class="dash-spacer"></div><button class="btn btn-outline" data-action="${state.mode==='demo'?'end-demo':'logout'}">${state.mode==='demo'?'Demo beenden':'Abmelden'}</button></aside>
+ <aside class="dash-sidebar"><div class="dash-side-brand">TeamZeit<em>.</em></div>${state.mode==='live'?'<button class="dash-nav" data-action="open-scrum">Scrum Board</button>':''}<button class="dash-nav ${state.panel==='events'?'active':''}" data-action="panel-events">▦ &nbsp; Trainings</button>${trainer?`<button class="dash-nav ${state.panel==='settings'?'active':''}" data-action="panel-settings">⚙ &nbsp; Gruppe & Einladen</button>`:''}<div class="dash-tag">${state.mode==='demo'?'BEISPIELDATEN · DEMO':state.admin?'PLATTFORMADMINISTRATOR':state.locations.some(l=>l.id===state.group?.locationId&&l.canManage)?'STANDORTVERANTWORTLICH':trainer?'TRAINER':'MITGLIED'}</div><div class="dash-spacer"></div><button class="btn btn-outline" data-action="${state.mode==='demo'?'end-demo':'logout'}">${state.mode==='demo'?'Demo beenden':'Abmelden'}</button></aside>
  <div class="dash-main"><div class="dash-top"><div><small>${escapeHtml(state.group?.name||'MEINE GRUPPE')}</small><h3>${heading}</h3></div>${state.panel==='events'&&trainer?'<button class="btn btn-primary" data-action="add-event">+ Termin anlegen</button>':''}</div>
- ${state.mode==='demo'?`<div class="demo-banner"><strong>Interaktive Demo.</strong> Alle Angaben sind Beispiele und werden nur in diesem Browser gespeichert. <div class="switches"><button data-action="demo-role" data-role="trainer" class="${trainer?'selected':''}">Als Trainer ansehen</button><button data-action="demo-role" data-role="member" class="${!trainer?'selected':''}">Als Mitglied ansehen</button><button data-action="reset-demo">Demo zurücksetzen</button></div></div>`:`<div class="group-tools"><label>Gruppe <select id="group-select">${state.groups.filter(g=>!state.locationFilter||g.locationId===state.locationFilter).map(g=>`<option value="${escapeHtml(g.id)}" ${g.id===state.group?.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}</select></label>${state.admin||state.locations.some(l=>l.canManage)||(trainer&&state.group?.locationId==='00000000-0000-4000-8000-000000000001')?'<button class="link-button" data-action="new-group">Gruppe erstellen</button>':''}<button class="link-button" data-action="join-group">Einladung verwenden</button><button class="link-button" data-action="refresh">Aktualisieren</button><button class="link-button" data-action="account">Mein Konto</button></div>`}
+ ${state.mode==='demo'?`<div class="demo-banner"><strong>Interaktive Demo.</strong> Alle Angaben sind Beispiele und werden nur in diesem Browser gespeichert. <div class="switches"><button data-action="demo-role" data-role="trainer" class="${trainer?'selected':''}">Als Trainer ansehen</button><button data-action="demo-role" data-role="member" class="${!trainer?'selected':''}">Als Mitglied ansehen</button><button data-action="reset-demo">Demo zurücksetzen</button></div></div>`:`<div class="group-tools"><label>Gruppe <select id="group-select">${state.groups.filter(g=>!state.locationFilter||g.locationId===state.locationFilter).map(g=>`<option value="${escapeHtml(g.id)}" ${g.id===state.group?.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('')}</select></label>${state.admin||state.locations.some(l=>l.canManage)||(trainer&&state.group?.locationId==='00000000-0000-4000-8000-000000000001')?'<button class="link-button" data-action="new-group">Gruppe erstellen</button>':''}<button class="link-button" data-action="join-group">Einladung verwenden</button><button class="link-button" data-action="refresh">Aktualisieren</button><button class="link-button" data-action="account">Mein Konto</button>${state.group?.membershipRole?'<button class="link-button" data-action="leave-group">Gruppe verlassen</button>':''}</div>`}
  ${platformTools()}${state.panel==='events'?`<div class="event-grid">${state.events.length?state.events.map(renderEvent).join(''):'<div class="empty-state"><strong>Keine passenden Trainingstermine</strong>Filter ändern oder einen Termin anlegen.</div>'}</div>`:renderSettings()}
  </div></div>`;
  root.innerHTML=html;
@@ -212,6 +219,9 @@ async function performAction(button){
  if(action==='auth-register')return showAuth('register');
  if(action==='auth-login')return showAuth('login');
  if(action==='auth-forgot')return showAuth('forgot');
+ if(action==='open-scrum')return openBoard();
+ if(action==='resend-verification'){button.disabled=true;try{const r=await call('/auth/resend-verification','POST',{});notify(r.verificationSent?'Bestätigungsmail versandt.':'Versand nicht bestätigt. Bitte später erneut versuchen.',!r.verificationSent);}finally{button.disabled=false;}return;}
+ if(action==='leave-group'){if(!confirm('Diese Trainingsgruppe verlassen? Deine dortigen Teilnahmeantworten werden entfernt.'))return;await call(`/groups/${state.group.id}/leave`,'POST',{});state.group=null;return loadLive();}
  if(action==='auth-login-clear'){incomingInvite='';state.invitePreview=null;return showAuth('login');}
  if(action==='accept-invite'){
    const result=await call('/groups/join','POST',{inviteCode:incomingInvite});state.group={id:result.id};incomingInvite='';state.invitePreview=null;await loadLive();notify('Einladung angenommen. Willkommen in der Gruppe!');return;
@@ -223,7 +233,7 @@ async function performAction(button){
  }
  if(action==='account'){
   const settings=await call('/me/notifications');
-  openDialog(`<h3>Mein Konto</h3><p>Trainingsmails informieren über Nachrücken, Terminänderungen und Absagen. Standardmäßig ausgeschaltet; Einladungs- und Sicherheitsmails bleiben verfügbar.</p><button class="btn btn-secondary" data-action="toggle-notifications" data-enabled="${!settings.enabled}">Trainingsmails ${settings.enabled?'ausschalten':'einschalten'}</button><p>Eigene Daten abrufen oder Konto löschen.</p><button class="btn btn-secondary" data-action="export-account">Datenexport anzeigen</button><button class="link-button" data-action="delete-account">Konto endgültig löschen</button>`);return;
+  openDialog(`<h3>Mein Konto</h3><p>Trainingsmails informieren über Nachrücken, Terminänderungen und Absagen. Standardmäßig ausgeschaltet; Einladungs- und Sicherheitsmails bleiben verfügbar.</p><button class="btn btn-secondary" data-action="toggle-notifications" data-enabled="${!settings.enabled}">Trainingsmails ${settings.enabled?'ausschalten':'einschalten'}</button>${!state.user.emailVerified?'<p>Die E-Mail-Adresse dieses bestehenden Kontos wurde noch nicht separat bestätigt.</p><button class="btn btn-secondary" data-action="resend-verification">E-Mail-Adresse bestätigen</button>':'<p>E-Mail-Adresse bestätigt.</p>'}<p>Eigene Daten abrufen oder Konto löschen.</p><button class="btn btn-secondary" data-action="export-account">Datenexport anzeigen</button><button class="link-button" data-action="delete-account">Konto endgültig löschen</button>`);return;
  }
  if(action==='toggle-notifications'){await call('/me/notifications','PATCH',{enabled:button.dataset.enabled==='true'});closeDialog();notify('E-Mail-Einstellung gespeichert.');return;}
  if(action==='manage-locations')return showLocationManagement();
@@ -301,20 +311,22 @@ document.addEventListener('submit',async ev=>{
   if(form.dataset.form==='forgot'){const result=await call('/auth/forgot-password','POST',data);notify(result.message);return;}
   if(form.dataset.form==='reset'){await call('/auth/reset-password','POST',{...data,token:resetToken});resetToken='';await showAuth('login');notify('Passwort geändert. Bitte neu anmelden.');return;}
   if(form.dataset.form==='login'){
-    await call('/auth/login','POST',data);
+    const login=await call('/auth/login','POST',data);
+    if(login.user.verificationRequired){await loadLive();notify('Bitte zuerst die E-Mail-Adresse bestätigen.');return;}
     if(incomingInvite){const joined=await call('/groups/join','POST',{inviteCode:incomingInvite});state.group={id:joined.id};incomingInvite='';state.invitePreview=null;}
   }
-  else if(form.dataset.form==='register')await call('/auth/register','POST',{...data,privacyAccepted:data.privacyAccepted==='on'});
+  else if(form.dataset.form==='register'){const result=await call('/auth/register','POST',{...data,privacyAccepted:data.privacyAccepted==='on'});if(!result.verificationSent)notify('Konto angelegt; Mailversand noch nicht bestätigt. Bitte Bestätigungsmail erneut anfordern.',true);}
   else if(form.dataset.form==='setup')await call('/setup','POST',data);
   if(form.dataset.form==='register'){incomingInvite='';state.invitePreview=null;}
   await loadLive();notify('Willkommen bei TeamZeit!');
  }catch(err){errorIn(form,err.message)}finally{btn.disabled=false}
 });
 (async()=>{
+ if(verifyToken){await verifyEmail();return;}
  if(resetToken){await showAuth('reset');return;}
  if(incomingInvite){await showAuth('register');return;}
- try{const me=await call('/me');if(me.user){state.mode='live';state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.locations=me.locations;state.group=me.groups[0]||null;state.events=await loadEvents();renderApp()}}
- catch{/* Public landing stays available without backend session. */}
+ try{const me=await call('/me');if(me.user){state.mode='live';state.user=me.user;state.groups=me.groups;state.admin=me.admin;state.locations=me.locations;state.group=me.groups[0]||null;state.events=await loadEvents();renderApp();if(requestedBoard&&!state.user.verificationRequired){requestedBoard=false;openBoard();}}}
+ catch{if(requestedBoard)await showAuth('login');}
 })();
 document.addEventListener('change',async event=>{
  if(event.target.id==='location-filter'){
@@ -327,7 +339,10 @@ document.addEventListener('change',async event=>{
  try{state.events=await loadEvents();if(state.panel==='settings')await refreshEmailInvites();renderApp();}catch(error){notify(error.message,true);}
 });
 window.addEventListener('hashchange',()=>{
+ if(location.hash==='#scrum'){openBoard();return;}
+ if(location.hash==='#app'&&state.panel==='scrum'){root.onclick=null;root.onsubmit=null;root.onchange=null;state.panel='events';renderApp();return;}
  const params=new URLSearchParams(location.hash.slice(1));
+ if(params.has('verify')){verifyToken=params.get('verify');history.replaceState(null,'',location.pathname+location.search);verifyEmail();return;}
  if(params.has('invite')){incomingInvite=params.get('invite');history.replaceState(null,'',location.pathname+location.search);showAuth('register');}
  if(params.has('reset')){resetToken=params.get('reset');history.replaceState(null,'',location.pathname+location.search);showAuth('reset');}
 });
