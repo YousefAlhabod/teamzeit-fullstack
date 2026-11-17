@@ -296,6 +296,25 @@ async function api(request,env) {
     return json({ok:true,...await bookTraining(env,scope.user_id,eid,data.status===null?null:validStatus(data.status),scope)});
   }
   const user=await requireUser(request,env);
+  if(path==='/api/feedback'&&method==='GET'){
+    const before=u.searchParams.get('before')||'9223372036854775807';
+    if(!/^\d{1,19}$/.test(before))throw new HttpError(400,'Ungültige Seitenauswahl.');
+    const rows=(await env.DB.prepare('SELECT f.id,u.name AS author,f.kind,f.content,f.created_at AS createdAt FROM feedback f JOIN users u ON u.id=f.user_id WHERE f.id<CAST(? AS INTEGER) ORDER BY f.id DESC LIMIT 51').bind(before).all()).results;
+    return json({posts:rows.slice(0,50),next:rows.length>50?String(rows[49].id):null,canDelete:user.email===env.USER_DIRECTORY_ADMIN_EMAIL&&await isAdmin(env,user.id)});
+  }
+  if(path==='/api/feedback'&&method==='POST'){
+    const d=await params(request);if(!['comment','improvement','feature'].includes(d.kind))throw new HttpError(400,'Bitte eine Beitragsart wählen.');
+    const content=textField(d.content,'Beitrag',2000);
+    await rateLimit(env,`feedback:${user.id}`,10,3600);
+    await env.DB.prepare('INSERT INTO feedback(user_id,kind,content,created_at) VALUES(?,?,?,?)').bind(user.id,d.kind,content,new Date().toISOString()).run();
+    return json({ok:true},201);
+  }
+  const feedbackDelete=path.match(/^\/api\/feedback\/(\d{1,16})$/);
+  if(feedbackDelete&&method==='DELETE'){
+    if(user.email!==env.USER_DIRECTORY_ADMIN_EMAIL||!await isAdmin(env,user.id))throw new HttpError(403,'Nur die persönliche Administration.');
+    const r=await env.DB.prepare('DELETE FROM feedback WHERE id=?').bind(feedbackDelete[1]).run();
+    if(!r.meta.changes)throw new HttpError(404,'Beitrag nicht gefunden.');return json({ok:true});
+  }
   if(path==='/api/admin/users'&&method==='GET'){
     if(user.email!==env.USER_DIRECTORY_ADMIN_EMAIL||!await isAdmin(env,user.id))throw new HttpError(403,'Nur die persönliche Administration.');
     const after=u.searchParams.get('after')||'';
@@ -344,7 +363,8 @@ async function api(request,env) {
     const managed=await env.DB.prepare('SELECT l.name,l.city FROM location_managers m JOIN locations l ON l.id=m.location_id WHERE m.user_id=?').bind(user.id).all();
     const scrumProjects=await env.DB.prepare('SELECT p.name,m.role FROM scrum_members m JOIN scrum_projects p ON p.id=m.project_id WHERE m.user_id=?').bind(user.id).all();
     const assignedScrumTasks=await env.DB.prepare('SELECT title,description,status,created_at,updated_at FROM scrum_tasks WHERE assignee_id=?').bind(user.id).all();
-    return json({user:publicUser(user),groups:groups.results,responses:responses.results,scrumProjects:scrumProjects.results,assignedScrumTasks:assignedScrumTasks.results,trainingNotifications:!!settings.training_notifications,access:{platformAdmin:await isAdmin(env,user.id),managedLocations:managed.results,projectReviewer:!!await env.DB.prepare('SELECT user_id FROM project_access WHERE user_id=?').bind(user.id).first()}});
+    const feedback=(await env.DB.prepare('SELECT kind,content,created_at AS createdAt FROM feedback WHERE user_id=? ORDER BY id').bind(user.id).all()).results;
+    return json({user:publicUser(user),groups:groups.results,responses:responses.results,scrumProjects:scrumProjects.results,assignedScrumTasks:assignedScrumTasks.results,feedback,trainingNotifications:!!settings.training_notifications,access:{platformAdmin:await isAdmin(env,user.id),managedLocations:managed.results,projectReviewer:!!await env.DB.prepare('SELECT user_id FROM project_access WHERE user_id=?').bind(user.id).first()}});
   }
   if(path==='/api/groups'&&method==='POST') {
     const data=await params(request),id=crypto.randomUUID();
