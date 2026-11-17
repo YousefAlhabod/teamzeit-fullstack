@@ -31,8 +31,9 @@ export async function scrumApi({env,user,path,method,data,id,json}){
  if(section==='tasks'&&method==='POST'&&!item){
   if(!manage)throw new HttpError(403,'Nur Projektadministration, Product Owner oder Scrum Master legen Aufgaben an.');
   const d=await data(),tid=crypto.randomUUID(),now=new Date().toISOString(),assignee=d.assigneeId?id(d.assigneeId):null;
+  if(!assignee)throw new HttpError(400,'Bitte eine zuständige Person auswählen.');
   if(assignee&&!await scrumRole(env,assignee,pid))throw new HttpError(400,'Zuständige Person gehört nicht zu diesem Projekt.');
-  await env.DB.prepare('INSERT INTO scrum_tasks(id,project_id,title,description,assignee_id,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').bind(tid,pid,textField(d.title,'Titel',140),textField(d.description||'','Beschreibung',2000,false),assignee,user.id,now,now).run();return json({id:tid},201);
+  await env.DB.prepare('INSERT INTO scrum_tasks(id,project_id,title,description,assignee_id,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').bind(tid,pid,textField(d.title,'Titel',140),textField(d.description,'Beschreibung',2000),assignee,user.id,now,now).run();return json({id:tid},201);
  }
  if(section==='tasks'&&item&&['PATCH','DELETE'].includes(method)){
   const task=await env.DB.prepare('SELECT * FROM scrum_tasks WHERE id=? AND project_id=?').bind(item,pid).first();if(!task)throw new HttpError(404,'Aufgabe nicht gefunden.');
