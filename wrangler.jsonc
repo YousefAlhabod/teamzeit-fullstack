@@ -4,7 +4,7 @@
   "account_id": "9be816f99da25a8e3e7060c22f5fdb26",
   "workers_dev": true,
   "routes": [{"pattern":"teamzeit.yousef-alhabod.de","custom_domain":true}],
-  "vars": {"APP_ORIGIN":"https://teamzeit.yousef-alhabod.de","REGISTRATION_ENABLED":"true","MAIL_FROM":"TeamZeit <noreply@mail.teamzeit.yousef-alhabod.de>"},
+  "vars": {"APP_ORIGIN":"https://teamzeit.yousef-alhabod.de","REGISTRATION_ENABLED":"true","MAIL_FROM":"TeamZeit <noreply@mail.teamzeit.yousef-alhabod.de>","USER_DIRECTORY_ADMIN_EMAIL":"devyousefalhabod@gmail.com"},
   "triggers": {"crons":["17 3 * * *","*/5 * * * *"]},
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
